@@ -1,5 +1,5 @@
 import { TextDecoder } from "node:util";
-import type { TerminalStream, TerminalStreamOptions } from "./stream.ts";
+import type { TerminalStream, TerminalStreamOptions } from "./api.ts";
 
 export class TerminalInputStream implements TerminalStream<string>
 {
