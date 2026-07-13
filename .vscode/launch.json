@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {"type":"node",
+        "request":"launch",
+        "name":"Unitium tests",
+        "runtimeExecutable":"unitium-tsx",
+        "args":["./source"],
+        "cwd":"${workspaceFolder}",
+        "console": "internalConsole",
+        "skipFiles": [
+            "<node_internals>/**",
+            "${workspaceFolder}/node_modules/**"
+        ]
+    }
+    ]
+}
