@@ -92,7 +92,7 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
             yield new KeyboardEvent(charAfterEscape, KeyboardEvent.AltModifier);
     }
 
-    // Look into the CSIEvent class to better understand what we are parsing here.
+    // To better understand CSI and its structure read the notes in the notes.md file: project/notes.md#control-sequence-introducer-csi
     private async *parseCSIEvent()
     {
         let namespaceMarker = "";
