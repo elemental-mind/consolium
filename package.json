@@ -1,0 +1,41 @@
+{
+  "name": "terminalium",
+  "version": "0.1.0",
+  "description": "",
+  "keywords": [],
+  "license": "MIT",
+  "type": "module",
+  "types": "./distribution/npm/terminalium.d.ts",
+  "module": "./distribution/npm/terminalium.js",
+  "main": "./distribution/npm/terminalium.js",
+  "exports": {
+    ".": {
+      "types": "./distribution/npm/terminalium.d.ts",
+      "import": "./distribution/npm/terminalium.js"
+    }
+  },
+  "author": "Magnus Meseck",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elemental-mind/terminalium.git"
+  },
+  "homepage": "https://github.com/elemental-mind/terminalium#readme",
+  "scripts": {
+    "test": "unitium-tsx ./source",
+    "build:npm": "node project/scripts/build-npm-package.ts",
+    "build:jsr": "node project/scripts/build-jsr-package.ts",
+    "publish:npm": "git push --follow-tags && node project/scripts/build-npm-package.ts && npm publish",
+    "publish:jsr": "git push --follow-tags && node project/scripts/build-jsr-package.ts && cd distribution/jsr && deno publish"
+  },
+  "files": [
+    "distribution/npm",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "unitium": "^0.8.6"
+  }
+}
