@@ -1,7 +1,7 @@
 import type { TerminalEvent } from "../input/events.ts";
 import { CSIEvent, KeyboardEvent } from "../input/events.ts";
 import { TerminalInputStream } from "./characters.ts";
-import type { TerminalStream } from "./stream.ts";
+import type { TerminalStream, TerminalStreamOptions } from "./stream.ts";
 
 export class TerminalEventStream implements TerminalStream<TerminalEvent>
 {
@@ -18,7 +18,7 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
         return this.eventStream !== undefined;
     }
 
-    open()
+    open(options: TerminalStreamOptions = {})
     {
         if (this.isOpen)
             return this;
@@ -26,7 +26,7 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
         if (!TerminalEventStream.isSupported)
             throw new Error("TerminalEventStream requires an interactive TTY for stdin and stdout.");
 
-        this.inputStream.open();
+        this.inputStream.open(options);
         this.eventStream = this.parseEvents();
         return this;
     }
