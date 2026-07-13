@@ -17,6 +17,12 @@ export class KeyboardEvent
         this.modifiers = baseModifiers;
 
         const code = value.charCodeAt(0);
+
+        // These keys share their byte representation with Ctrl+I, Ctrl+J, Ctrl+M, and Ctrl+?. 
+        // Prefer the named-key interpretation expected from a terminal keyboard event stream.
+        if (value === "\t" || value === "\r" || value === "\n" || value === "\x7f")
+            return;
+
         if (code >= 0x01 && code <= 0x1a)
         {
             this.value = String.fromCharCode(code + 0x60);
