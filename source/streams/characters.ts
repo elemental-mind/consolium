@@ -1,15 +1,19 @@
 import { TextDecoder } from "node:util";
+import type { TerminalStream } from "./stream.ts";
 
-export class TerminalRawCharacterStream
+export class TerminalInputStream implements TerminalStream<string>
 {
-    static StreamClosure = new class StreamClosure { };
+    static get isSupported()
+    {
+        return process.stdin.isTTY === true && process.stdout.isTTY === true;
+    }
 
     private buffer: string[] = [];
 
     private decoder?: TextDecoder;
     private decoderSettings = { stream: true };
 
-    private nextValuePromise: PromiseWithResolvers<string> | null = null;
+    private nextValuePromise: PromiseWithResolvers<string | undefined> | null = null;
     private valuePromiseAwaiterIsConsumingChar: boolean = false;
 
     get isOpen()
@@ -19,6 +23,12 @@ export class TerminalRawCharacterStream
 
     open()
     {
+        if (this.isOpen)
+            return this;
+
+        if (!TerminalInputStream.isSupported)
+            throw new Error("TerminalInputStream requires an interactive TTY for stdin and stdout.");
+
         process.stdin.setRawMode(true);
         process.stdout.write("\x1b[?1003h\x1b[?1006h");
 
@@ -26,21 +36,35 @@ export class TerminalRawCharacterStream
 
         process.stdin.on("data", this.onStdinData);
         process.stdin.resume();
+
+        return this;
     }
 
-    peekChar()
+    /** Returns the next character without consuming it. */
+    async peek()
     {
-        return this.buffer.length ? this.buffer[0] : this.nextValue(false);
+        if (this.buffer.length)
+            return this.buffer[0];
+
+        return this.isOpen ? this.nextValue(false) : undefined;
     }
 
-    consumeChar()
+    /** Reads and consumes a single character. */
+    async read()
     {
-        return this.buffer.length ? this.buffer.shift()! : this.nextValue(true);
+        if (this.buffer.length)
+            return this.buffer.shift()!;
+
+        return this.isOpen ? this.nextValue(true) : undefined;
     }
 
-    close()
+    async close()
     {
-        this.nextValuePromise?.reject(TerminalRawCharacterStream.StreamClosure);
+        if (!this.isOpen)
+            return;
+
+        this.nextValuePromise?.resolve(undefined);
+        this.nextValuePromise = null;
 
         process.stdout.write("\x1b[?1006l\x1b[?1003l");
         process.stdin.setRawMode(false);
@@ -49,6 +73,24 @@ export class TerminalRawCharacterStream
         process.stdin.off("data", this.onStdinData);
 
         this.decoder = undefined;
+        this.buffer = [];
+    }
+
+    async *[Symbol.asyncIterator](): AsyncIterator<string>
+    {
+        if (!this.isOpen)
+            throw new Error("Can not iterate TerminalInputStream because it is closed.");
+
+        try
+        {
+            let char: string | undefined;
+            while ((char = await this.read()) !== undefined)
+                yield char;
+        }
+        finally
+        {
+            await this.close();
+        }
     }
 
     private onStdinData = (data: string | Buffer) =>

@@ -1,73 +1,90 @@
 import type { TerminalEvent } from "../input/events.ts";
 import { CSIEvent, KeyboardEvent } from "../input/events.ts";
-import { TerminalRawCharacterStream } from "./characters.ts";
+import { TerminalInputStream } from "./characters.ts";
+import type { TerminalStream } from "./stream.ts";
 
-export class TerminalEventStream
+export class TerminalEventStream implements TerminalStream<TerminalEvent>
 {
-    static StreamClosure = new class StreamClosure { };
-
-    static get isSupportedInCurrentEnvironment()
+    static get isSupported()
     {
-        return process.stdin.isTTY && process.stdout.isTTY;
+        return TerminalInputStream.isSupported;
     }
 
-    private inputStream = new TerminalRawCharacterStream();
-    private eventStream?: AsyncGenerator<TerminalEvent>;
+    private inputStream = new TerminalInputStream();
+    private eventStream?: AsyncGenerator<TerminalEvent, void>;
 
-    constructor()
+    get isOpen()
     {
-        if (!TerminalEventStream.isSupportedInCurrentEnvironment) throw new Error("TerminalEventStream requires an interactive TTY for stdin and stdout.");
-    }
-
-    get events()
-    {
-        if (!this.eventStream)
-            throw new Error("Can not get events because TerminalEventStream is closed.");
-
-        return this.eventStream;
+        return this.eventStream !== undefined;
     }
 
     open()
     {
-        if (!this.eventStream)
-        {
-            this.inputStream.open();
-            this.eventStream = this.parseEvents();
-        }
+        if (this.isOpen)
+            return this;
 
-        return this.eventStream!;
+        if (!TerminalEventStream.isSupported)
+            throw new Error("TerminalEventStream requires an interactive TTY for stdin and stdout.");
+
+        this.inputStream.open();
+        this.eventStream = this.parseEvents();
+        return this;
     }
 
-    close()
+    /** Reads and consumes a single terminal event. */
+    async read()
+    {
+        if (!this.eventStream)
+            return undefined;
+
+        const result = await this.eventStream.next();
+        return result.done ? undefined : result.value;
+    }
+
+    async close()
     {
         if (!this.eventStream)
             return;
 
-        this.eventStream.return(TerminalEventStream.StreamClosure);
-        this.inputStream.close();
+        const eventStream = this.eventStream;
+        this.eventStream = undefined;
+
+        await this.inputStream.close();
+        await eventStream.return(undefined);
+    }
+
+    [Symbol.asyncIterator](): AsyncIterator<TerminalEvent>
+    {
+        if (!this.eventStream)
+            throw new Error("Can not iterate TerminalEventStream because it is closed.");
+
+        return this.eventStream;
     }
 
     private async *parseEvents()
     {
         try
         {
-            let char: string;
-            while (char = await this.inputStream.consumeChar())
+            let char: string | undefined;
+            while ((char = await this.inputStream.read()) !== undefined)
                 if (char === "\x1b")
                     yield* this.parseEscapeSequence();
                 else
                     yield new KeyboardEvent(char, KeyboardEvent.NoModifier);
         }
-        catch (errorOrStreamClosure)
+        finally
         {
-            if (errorOrStreamClosure !== TerminalRawCharacterStream.StreamClosure)
-                throw errorOrStreamClosure;
+            this.eventStream = undefined;
+            await this.inputStream.close();
         }
     }
 
     private async *parseEscapeSequence()
     {
-        const charAfterEscape = await this.inputStream.consumeChar();
+        const charAfterEscape = await this.inputStream.read();
+
+        if (charAfterEscape === undefined)
+            return;
 
         if (charAfterEscape === "[")
             yield* this.parseCSIEvent();
@@ -82,8 +99,8 @@ export class TerminalEventStream
         let parameters = "";
         let intermediates = "";
 
-        let char: string;
-        while (char = await this.inputStream.consumeChar())
+        let char: string | undefined;
+        while ((char = await this.inputStream.read()) !== undefined)
         {
             const code = char.charCodeAt(0);
 

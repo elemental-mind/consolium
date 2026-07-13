@@ -2,7 +2,7 @@ import { TerminalEventStream } from "../source/terminalium.ts";
 
 export async function logEvents()
 {
-    if (!TerminalEventStream.isSupportedInCurrentEnvironment)
+    if (!TerminalEventStream.isSupported)
         throw new Error("Not in interactive terminal");
 
     const terminalStream = new TerminalEventStream();
@@ -11,7 +11,7 @@ export async function logEvents()
         console.log(event);
 
         if (event.type === "character" && event.ctrl && event.value === "c")
-            return terminalStream.close();
+            await terminalStream.close();
     }
 }
 
