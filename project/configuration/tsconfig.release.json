@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../distribution/npm",
+    "rootDir": "../../source"
+  },
+  "include": ["../../source/**/*.ts"],
+  "exclude": [
+    "../../source/**/*.spec.ts",
+    "../../source/**/*.test.ts"
+  ]
+}
