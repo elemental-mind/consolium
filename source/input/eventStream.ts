@@ -1,6 +1,6 @@
-import type { TerminalEvent } from "../input/events.ts";
-import { CSIEvent, KeyboardEvent } from "../input/events.ts";
-import { TerminalInputStream } from "./inputStream.ts";
+import type { TerminalEvent } from "./events.ts";
+import { CSIEvent, KeyboardEvent } from "./events.ts";
+import { TerminalInputStream } from "./rawStream.ts";
 import type { TerminalStream, TerminalStreamOptions } from "./api.ts";
 
 export class TerminalEventStream implements TerminalStream<TerminalEvent>

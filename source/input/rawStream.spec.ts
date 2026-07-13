@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
-import { TerminalInputStream } from "./inputStream.ts";
+import { TerminalInputStream } from "./rawStream.ts";
 
 export class TerminalInputStreamTestSuite
 {

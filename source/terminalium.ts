@@ -1,3 +1,3 @@
-export { TerminalInputStream } from "./streams/inputStream.ts";
-export { TerminalEventStream } from "./streams/eventStream.ts";
-export type { TerminalStream, TerminalStreamOptions } from "./streams/api.ts";
+export { TerminalInputStream } from "./input/rawStream.ts";
+export { TerminalEventStream } from "./input/eventStream.ts";
+export type { TerminalStream, TerminalStreamOptions } from "./input/api.ts";
