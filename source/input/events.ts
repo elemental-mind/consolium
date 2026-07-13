@@ -18,9 +18,9 @@ export class KeyboardEvent
 
         const code = value.charCodeAt(0);
 
-        // These keys share their byte representation with Ctrl+I, Ctrl+J, Ctrl+M, and Ctrl+?. 
-        // Prefer the named-key interpretation expected from a terminal keyboard event stream.
-        if (value === "\t" || value === "\r" || value === "\n" || value === "\x7f")
+        // Escape is also the prefix for terminal sequences, while the remaining keys share their
+        // byte representation with Ctrl+I, Ctrl+J, Ctrl+M, and Ctrl+?. Prefer named-key semantics.
+        if (value === "\x1b" || value === "\t" || value === "\r" || value === "\n" || value === "\x7f")
             return;
 
         if (code >= 0x01 && code <= 0x1a)

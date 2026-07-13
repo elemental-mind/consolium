@@ -81,11 +81,16 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
 
     private async *parseEscapeSequence()
     {
-        const charAfterEscape = await this.inputStream.read();
-
-        if (charAfterEscape === undefined)
+        // Terminal-generated escape sequences are expected to arrive in one stdin chunk.
+        // If no following character is already buffered in the input stream,
+        // treat Escape as a standalone key instead of an escape sequence.
+        if (!this.inputStream.hasBufferedInput)
+        {
+            yield new KeyboardEvent("\x1b", KeyboardEvent.NoModifier);
             return;
+        }
 
+        const charAfterEscape = await this.inputStream.read() as string;
         if (charAfterEscape === "[")
             yield* this.parseCSIEvent();
         else

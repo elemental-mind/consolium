@@ -23,6 +23,11 @@ export class TerminalInputStream implements TerminalStream<string>
         return this.decoder !== undefined;
     }
 
+    get hasBufferedInput()
+    {
+        return this.buffer.length > 0;
+    }
+
     open(options: TerminalStreamOptions = {})
     {
         if (!TerminalInputStream.isSupported)
@@ -47,7 +52,7 @@ export class TerminalInputStream implements TerminalStream<string>
     }
 
     /** Returns the next character without consuming it. */
-    async peek()
+    peek()
     {
         if (this.buffer.length)
             return this.buffer[0];
@@ -56,7 +61,7 @@ export class TerminalInputStream implements TerminalStream<string>
     }
 
     /** Reads and consumes a single character. */
-    async read()
+    read()
     {
         if (this.buffer.length)
             return this.buffer.shift()!;

@@ -3,6 +3,15 @@ import { KeyboardEvent } from "./events.ts";
 
 export class KeyboardEventTestSuite
 {
+    preservesEscapeAsSpecialKey()
+    {
+        const event = new KeyboardEvent("\x1b");
+
+        assert.equal(event.value, "\x1b");
+        assert.equal(event.ctrl, false);
+        assert.equal(event.alt, false);
+    }
+
     preservesTabAsSpecialKey()
     {
         const event = new KeyboardEvent("\t");
