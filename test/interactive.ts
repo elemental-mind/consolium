@@ -10,7 +10,7 @@ export async function logEvents()
     {
         console.log(event);
 
-        if (event.type === "character" && event.ctrl && event.value === "c")
+        if (event.type === "keypress" && event.ctrlKey && event.key === "c")
             await terminalStream.close();
     }
 }
