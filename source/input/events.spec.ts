@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CSIEvent, SS3Event, TerminalEvent, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
+import { MouseButton, MouseButtonFlag } from "./mappings/mouseButtonEncodings.ts";
 
 export class TerminalEventTestSuite
 {
@@ -33,13 +34,13 @@ export class TerminalEventTestSuite
     exposesTerminalCellCoordinates()
     {
         const event = new TerminalMouseEvent("mousemove", {
-            buttons: 5,
+            buttons: (MouseButtonFlag.Left | MouseButtonFlag.Middle) as import("./mappings/mouseButtonEncodings.ts").MouseButtonFlags,
             column: 10,
             row: 4,
         });
 
         assert.equal(event.type, "mousemove");
-        assert.equal(event.button, -1);
+        assert.equal(event.button, MouseButton.None);
         assert.equal(event.buttons, 5);
         assert.equal(event.leftMouseButton, true);
         assert.equal(event.middleMouseButton, true);

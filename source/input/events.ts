@@ -1,7 +1,7 @@
-export type TerminalMouseEventType = "mousedown" | "mouseup" | "mousemove" | "wheel";
+import { MouseButton, MouseButtonFlag, type MouseButtonFlags } from "./mappings/mouseButtonEncodings.ts";
+import { ModifierKeyFlag, type ModifierKeyFlags } from "./mappings/modifierKeyEncodings.ts";
 
-type BitField = number;
-type BitFlag = number;
+export type TerminalMouseEventType = "mousedown" | "mouseup" | "mousemove" | "wheel";
 
 export interface ModifierInfo
 {
@@ -12,8 +12,8 @@ export interface ModifierInfo
 
 export interface MouseEventInfo extends ModifierInfo
 {
-    button: number;
-    buttons: BitField;
+    button: MouseButton;
+    buttons: MouseButtonFlags;
     column: number;
     row: number;
 }
@@ -26,22 +26,24 @@ export interface WheelEventInfo extends MouseEventInfo
 
 export abstract class TerminalEvent implements ModifierInfo
 {
-    static readonly shiftKeyBit: BitFlag = 1 << 0;
-    static readonly altKeyBit: BitFlag = 1 << 1;
-    static readonly ctrlKeyBit: BitFlag = 1 << 2;
+    static readonly shiftKeyBit = ModifierKeyFlag.Shift;
+    static readonly altKeyBit = ModifierKeyFlag.Alt;
+    static readonly ctrlKeyBit = ModifierKeyFlag.Ctrl;
 
     abstract readonly type: string;
-    private readonly modifierBits: BitField;
-    get altKey() { return (this.modifierBits & TerminalEvent.altKeyBit) !== 0; }
-    get ctrlKey() { return (this.modifierBits & TerminalEvent.ctrlKeyBit) !== 0; }
-    get shiftKey() { return (this.modifierBits & TerminalEvent.shiftKeyBit) !== 0; }
+    private readonly modifierKeys: ModifierKeyFlags;
+
+    get altKey() { return (this.modifierKeys & TerminalEvent.altKeyBit) !== 0; }
+    get ctrlKey() { return (this.modifierKeys & TerminalEvent.ctrlKeyBit) !== 0; }
+    get shiftKey() { return (this.modifierKeys & TerminalEvent.shiftKeyBit) !== 0; }
 
     protected constructor(modifiers: Partial<ModifierInfo> = {})
     {
-        this.modifierBits =
+        this.modifierKeys = (
             (modifiers.shiftKey ? TerminalEvent.shiftKeyBit : 0) |
             (modifiers.altKey ? TerminalEvent.altKeyBit : 0) |
-            (modifiers.ctrlKey ? TerminalEvent.ctrlKeyBit : 0);
+            (modifiers.ctrlKey ? TerminalEvent.ctrlKeyBit : 0)
+        ) as ModifierKeyFlags;
     }
 }
 
@@ -89,23 +91,13 @@ export class SS3Event extends TerminalEvent
 
 export class TerminalMouseEvent<Type extends TerminalMouseEventType> extends TerminalEvent implements MouseEventInfo
 {
-    static readonly leftMouseButtonBit: BitFlag = 1 << 0;
-    static readonly rightMouseButtonBit: BitFlag = 1 << 1;
-    static readonly middleMouseButtonBit: BitFlag = 1 << 2;
+    static readonly leftMouseButtonBit = MouseButtonFlag.Left;
+    static readonly rightMouseButtonBit = MouseButtonFlag.Right;
+    static readonly middleMouseButtonBit = MouseButtonFlag.Middle;
 
     readonly type: Type;
-    /** The button associated with the event: 0 for left, 1 for middle, 2 for right, or -1 for none. */
-    readonly button: number;
-    /**
-     * Bitmask of all buttons currently pressed:
-     * ```text
-     * 2 1 0
-     * │ │ └─ left
-     * │ └─── right
-     * └───── middle
-     * ```
-     */
-    readonly buttons: BitField;
+    readonly button: MouseButton;
+    readonly buttons: MouseButtonFlags;
 
     readonly column: number;
     readonly row: number;
@@ -118,8 +110,8 @@ export class TerminalMouseEvent<Type extends TerminalMouseEventType> extends Ter
     {
         super(init);
         this.type = type;
-        this.button = init.button ?? -1;
-        this.buttons = init.buttons ?? 0;
+        this.button = init.button ?? MouseButton.None;
+        this.buttons = init.buttons ?? MouseButtonFlag.None;
         this.column = init.column ?? 0;
         this.row = init.row ?? 0;
     }
@@ -140,3 +132,11 @@ export class TerminalWheelEvent extends TerminalMouseEvent<"wheel"> implements W
         this.deltaY = init.deltaY ?? 0;
     }
 }
+
+/** Internal union used by the decoded input stream. */
+export type TerminalInputEvent =
+    CSIEvent |
+    SS3Event |
+    TerminalKeyboardEvent |
+    TerminalMouseEvent<TerminalMouseEventType> |
+    TerminalWheelEvent;

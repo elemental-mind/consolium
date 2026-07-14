@@ -1,10 +1,13 @@
 import type { TerminalStream } from "./api.ts";
 import type { ModifierInfo, MouseEventInfo, TerminalInputEvent } from "./events.ts";
+import type { MouseButtonFlags } from "./mappings/mouseButtonEncodings.ts";
+import { MouseButton, MouseButtonFlag } from "./mappings/mouseButtonEncodings.ts";
 import { CSIEvent, SS3Event, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
 import { namedCharacters } from "./mappings/charToKey.ts";
 import { csiInstructionToKey, tildeInstructionParamToKey } from "./mappings/csiCodesToKey.ts";
 import { ss3InstructionsToKey } from "./mappings/ss3CodesToKey.ts";
 import { TerminalInputStream } from "./rawStream.ts";
+import type { BitField } from "../utils/bitField.ts";
 
 export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
 {
@@ -145,7 +148,7 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
 
 export class TerminalEventDecoder
 {
-    private buttons = 0;
+    private buttons: MouseButtonFlags = MouseButtonFlag.None;
 
     decodeCharacter(value: string, modifiers: Partial<ModifierInfo> = {})
     {
@@ -236,94 +239,87 @@ export class TerminalEventDecoder
         //  │ │ └───────── Ctrl
         //  │ └─────────── move event
         //  └───────────── wheel event
-        const statusByte = parameters[0];
+        const statusByte = parameters[0] as BitField;
 
-        const eventType = this.decodeEventType(instruction, statusByte);
+        const eventType = this.decodeMouseEventType(instruction, statusByte);
 
         const commonEventParameters: Omit<MouseEventInfo, "buttons" | "button"> = {
-            ...this.zeroBasedRowAndColumnFrom(parameters),       //column, row
-            ...this.decodeMouseModifierKeyStatus(statusByte),    //ctr, alt, shift
+            ...this.decodeRowAndColumnAsZeroBased(parameters),            //column, row
+            ...this.decodeMouseEventModifierKeyState(statusByte),    //ctr, alt, shift
         };
 
         switch (eventType)
         {
             case "mousemove":
-                return new TerminalMouseEvent(eventType, { button: -1, buttons: this.buttons, ...commonEventParameters });
+                return new TerminalMouseEvent(eventType, { button: MouseButton.None, buttons: this.buttons, ...commonEventParameters });
             case "wheel":
-                return new TerminalWheelEvent({ button: -1, buttons: this.buttons, ...this.scrollDeltas(statusByte), ...commonEventParameters });
+                return new TerminalWheelEvent({ button: MouseButton.None, buttons: this.buttons, ...this.decodeScrollDeltas(statusByte), ...commonEventParameters });
             case "mousedown":
                 {
-                    const { button, buttonBitFlag } = this.buttonAndButtonFlag(statusByte);
-                    this.buttons |= buttonBitFlag;
+                    const { button, buttonBitFlag } = this.decodeActuatedButton(statusByte);
+                    this.buttons = (this.buttons | buttonBitFlag) as MouseButtonFlags;
                     return new TerminalMouseEvent(eventType, { button, buttons: this.buttons, ...commonEventParameters });
                 }
             case "mouseup":
                 {
-                    const { button, buttonBitFlag } = this.buttonAndButtonFlag(statusByte);
-                    this.buttons &= ~buttonBitFlag;
+                    const { button, buttonBitFlag } = this.decodeActuatedButton(statusByte);
+                    this.buttons = (this.buttons & ~buttonBitFlag) as MouseButtonFlags;
                     return new TerminalMouseEvent(eventType, { button, buttons: this.buttons, ...commonEventParameters });
                 }
         }
     }
 
-    private decodeEventType(instruction: string, stateBitMask: number)
+    private decodeMouseEventType(instruction: string, statusBits: BitField)
     {
-        if ((stateBitMask & 0b0100000) !== 0)
+        if ((statusBits & 0b0100000) !== 0)
             return "mousemove";
-        if ((stateBitMask & 0b1000000) !== 0)
+        if ((statusBits & 0b1000000) !== 0)
             return "wheel";
         if (instruction === "M")
             return "mousedown";
         if (instruction === "m")
             return "mouseup";
-        else
-            throw new Error("Unknown mouse event type");
+
+        throw new Error("Unknown mouse event type");
     }
 
-    private decodeMouseModifierKeyStatus(stateBitMask: number)
-    {
-        return { shiftKey: (stateBitMask & 0b0000100) !== 0, altKey: (stateBitMask & 0b0001000) !== 0, ctrlKey: (stateBitMask & 0b0010000) !== 0 };
-    }
-
-    private buttonAndButtonFlag(stateBitMask: number)
-    {
-        const buttonState = stateBitMask & 0b0000011;
-        //Button values:
-        //          left  middle  right  none
-        //xterm:      0      1      2      3
-        //ours:       0      1      2     -1
-        const button = buttonState === 3 ? -1 : buttonState;
-        //Recall our button mask layout:
-        // 2 1 0
-        // │ │ └─ left
-        // │ └─── right
-        // └───── middle
-        const buttonBitFlag = button === 0 ? 0b001 : button === 1 ? 0b100 : button === 2 ? 0b010 : 0;
-
-        return { button, buttonBitFlag };
-    }
-
-    private scrollDeltas(stateBitMask: number)
-    {
-        const scrollDirection = stateBitMask & 0b0000011;
-
-        let deltaX = 0;
-        let deltaY = 0;
-        switch (scrollDirection)
-        {
-            case 0: deltaY = -1; break; //Up
-            case 1: deltaY = 1; break;  //Down
-            case 2: deltaX = -1; break; //Left
-            case 3: deltaX = 1; break;  //Right
-        }
-
-        return { deltaX, deltaY };
-    }
-
-    private zeroBasedRowAndColumnFrom(parameters: number[])
+    private decodeRowAndColumnAsZeroBased(parameters: number[])
     {
         //Reported terminal cell coordinates are 1-based. We need to offset them for a normalized repr.
         const [, oneBasedColumn, oneBasedRow] = parameters;
         return { column: oneBasedColumn - 1, row: oneBasedRow - 1 };
+    }
+
+    private decodeMouseEventModifierKeyState(statusBits: BitField)
+    {
+        return {
+            shiftKey: (statusBits & 0b0000100) !== 0,
+            altKey: (statusBits & 0b0001000) !== 0,
+            ctrlKey: (statusBits & 0b0010000) !== 0
+        };
+    }
+
+    private decodeActuatedButton(statusBits: BitField)
+    {
+        const buttonCode = statusBits & 0b0000011;
+        switch (buttonCode)
+        {
+            case 0: return { button: MouseButton.Left, buttonBitFlag: MouseButtonFlag.Left };
+            case 1: return { button: MouseButton.Middle, buttonBitFlag: MouseButtonFlag.Middle };
+            case 2: return { button: MouseButton.Right, buttonBitFlag: MouseButtonFlag.Right };
+            default: return { button: MouseButton.None, buttonBitFlag: MouseButtonFlag.None };
+        }
+    }
+
+    private decodeScrollDeltas(statusBits: BitField)
+    {
+        const scrollDirection = statusBits & 0b0000011;
+        switch (scrollDirection)
+        {
+            case 0: return { deltaX: 0, deltaY: -1 }; //Up
+            case 1: return { deltaX: 0, deltaY: 1 };  //Down
+            case 2: return { deltaX: -1, deltaY: 0 }; //Left
+            default: return { deltaX: 1, deltaY: 0 };  //Right
+        }
     }
 }
