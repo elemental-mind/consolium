@@ -1,8 +1,9 @@
 import type { TerminalEvent, TerminalModifierState, TerminalMouseEventInit } from "./events.ts";
 import { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
-import { csiKeys, namedCharacters, ss3Keys, tildeKeys } from "./mappings/mappings.ts";
+import { csiInstructionToKey, ss3Keys, tildeInstructionParamToKey } from "./mappings/csiCodesToKey.ts";
 import { TerminalInputStream } from "./rawStream.ts";
 import type { TerminalStream } from "./api.ts";
+import { namedCharacters } from "./mappings/charToKey.ts";
 
 export class TerminalEventStream implements TerminalStream<TerminalEvent>
 {
@@ -180,13 +181,13 @@ export class TerminalEventDecoder
         if (instruction === "Z")
             return new TerminalKeyboardEvent("Tab", { shiftKey: true });
 
-        const directKey = csiKeys.get(instruction);
+        const directKey = csiInstructionToKey.get(instruction);
         if (directKey)
             return new TerminalKeyboardEvent(directKey, this.decodeModifiers(parameters[1]));
 
         if (instruction === "~")
         {
-            const key = tildeKeys.get(parameters[0]);
+            const key = tildeInstructionParamToKey.get(parameters[0]);
             if (key)
                 return new TerminalKeyboardEvent(key, this.decodeModifiers(parameters[1]));
         }

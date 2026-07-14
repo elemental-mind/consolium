@@ -1,14 +1,4 @@
-export const namedCharacters = new Map([
-    ["\x00", " "],
-    ["\x08", "Backspace"],
-    ["\t", "Tab"],
-    ["\n", "Enter"],
-    ["\r", "Enter"],
-    ["\x1b", "Escape"],
-    ["\x7f", "Backspace"],
-]);
-
-export const csiKeys = new Map([
+export const csiInstructionToKey = new Map([
     ["A", "ArrowUp"],
     ["B", "ArrowDown"],
     ["C", "ArrowRight"],
@@ -17,7 +7,7 @@ export const csiKeys = new Map([
     ["H", "Home"],
 ]);
 
-export const tildeKeys = new Map([
+export const tildeInstructionParamToKey = new Map([
     [1, "Home"],
     [2, "Insert"],
     [3, "Delete"],
