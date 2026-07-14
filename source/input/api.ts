@@ -1,13 +1,12 @@
-export interface TerminalStreamOptions
-{
-    /** Enables terminal mouse button and motion reporting. */
-    mouseEvents?: boolean;
-}
+export { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
+export type { TerminalEvent, TerminalModifierState, TerminalMouseEventInit, TerminalMouseEventType, TerminalWheelEventInit } from "./events.ts";
+export { TerminalEventStream } from "./eventStream.ts";
+export { TerminalInputStream } from "./rawStream.ts";
 
 export interface TerminalStream<T> extends AsyncIterable<T>
 {
     readonly isOpen: boolean;
 
-    open(options?: TerminalStreamOptions): this;
+    open(): this;
     close(): Promise<void>;
 }

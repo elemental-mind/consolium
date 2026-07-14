@@ -1,5 +1,5 @@
 import { TextDecoder } from "node:util";
-import type { TerminalStream, TerminalStreamOptions } from "./api.ts";
+import type { TerminalStream } from "./api.ts";
 
 export class TerminalInputStream implements TerminalStream<string>
 {
@@ -16,8 +16,6 @@ export class TerminalInputStream implements TerminalStream<string>
     private nextValuePromise: PromiseWithResolvers<string | undefined> | null = null;
     private valuePromiseAwaiterIsConsumingChar: boolean = false;
 
-    private withMouseEvents: boolean = false;
-
     get isOpen()
     {
         return this.decoder !== undefined;
@@ -28,7 +26,7 @@ export class TerminalInputStream implements TerminalStream<string>
         return this.buffer.length > 0;
     }
 
-    open(options: TerminalStreamOptions = {})
+    open()
     {
         if (!TerminalInputStream.isSupported)
             throw new Error("TerminalInputStream requires an interactive TTY for stdin and stdout.");
@@ -36,12 +34,8 @@ export class TerminalInputStream implements TerminalStream<string>
         if (this.isOpen)
             return this;
 
-        this.withMouseEvents = options.mouseEvents ?? false;
-
         process.stdin.setRawMode(true);
-
-        if (this.withMouseEvents)
-            process.stdout.write("\x1b[?1003h\x1b[?1006h");
+        process.stdout.write("\x1b[?1003h\x1b[?1006h");
 
         this.decoder = new TextDecoder();
 
@@ -77,9 +71,7 @@ export class TerminalInputStream implements TerminalStream<string>
         this.nextValuePromise?.resolve(undefined);
         this.nextValuePromise = null;
 
-        if (this.withMouseEvents)
-            process.stdout.write("\x1b[?1006l\x1b[?1003l");
-        this.withMouseEvents = false;
+        process.stdout.write("\x1b[?1006l\x1b[?1003l");
 
         process.stdin.setRawMode(false);
 

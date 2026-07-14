@@ -1,62 +1,41 @@
 import assert from "node:assert/strict";
-import { KeyboardEvent } from "./events.ts";
+import { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
 
-export class KeyboardEventTestSuite
+export class TerminalEventTestSuite
 {
-    preservesEscapeAsSpecialKey()
+    exposesBrowserStyleKeyboardProperties()
     {
-        const event = new KeyboardEvent("\x1b");
+        const event = new TerminalKeyboardEvent("c", { altKey: true, ctrlKey: true });
 
-        assert.equal(event.value, "\x1b");
-        assert.equal(event.ctrl, false);
-        assert.equal(event.alt, false);
+        assert.equal(event.type, "keypress");
+        assert.equal(event.key, "c");
+        assert.equal(event.altKey, true);
+        assert.equal(event.ctrlKey, true);
+        assert.equal(event.shiftKey, false);
     }
 
-    preservesTabAsSpecialKey()
+    exposesTerminalCellCoordinates()
     {
-        const event = new KeyboardEvent("\t");
+        const event = new TerminalMouseEvent("mousemove", {
+            buttons: 1,
+            column: 10,
+            row: 4,
+        });
 
-        assert.equal(event.value, "\t");
-        assert.equal(event.ctrl, false);
+        assert.equal(event.type, "mousemove");
+        assert.equal(event.button, -1);
+        assert.equal(event.buttons, 1);
+        assert.equal(event.column, 10);
+        assert.equal(event.row, 4);
     }
 
-    preservesCarriageReturnAsEnter()
+    exposesWheelDeltasInLineUnits()
     {
-        const event = new KeyboardEvent("\r");
+        const event = new TerminalWheelEvent({ deltaY: -1 });
 
-        assert.equal(event.value, "\r");
-        assert.equal(event.ctrl, false);
-    }
-
-    preservesLineFeedAsEnter()
-    {
-        const event = new KeyboardEvent("\n");
-
-        assert.equal(event.value, "\n");
-        assert.equal(event.ctrl, false);
-    }
-
-    preservesDeleteAsBackspace()
-    {
-        const event = new KeyboardEvent("\x7f");
-
-        assert.equal(event.value, "\x7f");
-        assert.equal(event.ctrl, false);
-    }
-
-    decodesOtherControlCharactersAsCtrlLetters()
-    {
-        const event = new KeyboardEvent("\x03");
-
-        assert.equal(event.value, "c");
-        assert.equal(event.ctrl, true);
-    }
-
-    preservesBaseModifiersForSpecialKeys()
-    {
-        const event = new KeyboardEvent("\t", KeyboardEvent.AltModifier);
-
-        assert.equal(event.alt, true);
-        assert.equal(event.ctrl, false);
+        assert(event instanceof TerminalMouseEvent);
+        assert.equal(event.type, "wheel");
+        assert.equal(event.deltaY, -1);
+        assert.equal(event.deltaMode, TerminalWheelEvent.DOM_DELTA_LINE);
     }
 }
