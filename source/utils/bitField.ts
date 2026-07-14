@@ -6,7 +6,7 @@ export type BitField = number &
     readonly [bitField]: true;
 };
 
-export type BitFlag = number &
+export type BitFlag = BitField &
 {
     readonly [bitFlag]: true;
 };
