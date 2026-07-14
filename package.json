@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/elemental-mind/terminalium#readme",
   "scripts": {
+    "check": "tsc --noemit",
     "test": "unitium-tsx ./source",
     "build:npm": "node project/scripts/build-npm-package.ts",
     "build:jsr": "node project/scripts/build-jsr-package.ts",
