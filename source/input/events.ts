@@ -1,7 +1,5 @@
-export type TerminalInputEvent = CSIEvent | SS3Event | TerminalKeyboardEvent | TerminalMouseEvent<TerminalMouseEventType> | TerminalWheelEvent;
-export type TerminalMouseEventType = "mousedown" | "mouseup" | "mousemove";
+export type TerminalMouseEventType = "mousedown" | "mouseup" | "mousemove" | "wheel";
 
-type TerminalPointerEventType = TerminalMouseEventType | "wheel";
 type BitField = number;
 type BitFlag = number;
 
@@ -89,7 +87,7 @@ export class SS3Event extends TerminalEvent
     }
 }
 
-export class TerminalMouseEvent<Type extends TerminalPointerEventType = TerminalMouseEventType> extends TerminalEvent implements MouseEventInfo
+export class TerminalMouseEvent<Type extends TerminalMouseEventType> extends TerminalEvent implements MouseEventInfo
 {
     static readonly leftMouseButtonBit: BitFlag = 1 << 0;
     static readonly rightMouseButtonBit: BitFlag = 1 << 1;
