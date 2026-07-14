@@ -160,7 +160,14 @@ export class TerminalEventDecoder
         if (code >= 0x1c && code <= 0x1f)
             return new TerminalKeyboardEvent(String.fromCharCode(code + 0x40), { ...modifiers, ctrlKey: true });
 
-        return new TerminalKeyboardEvent(value, modifiers);
+        return new TerminalKeyboardEvent(value, {
+            ...modifiers,
+            shiftKey:
+                modifiers.shiftKey ||
+                // Terminals report resulting character, but no modifier state. We need to infer shift from the letter category.
+                // \p{Lu} —> a Unicode character in the Letter, Uppercase category.
+                /^\p{Lu}$/u.test(value),
+        });
     }
 
     decodeCSISequence(namespaceMarker: string, instruction: string, parameterString: string, intermediates: string)

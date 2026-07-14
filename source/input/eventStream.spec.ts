@@ -13,6 +13,15 @@ export class TerminalEventDecoderTestSuite
         assert.equal(event.ctrlKey, true);
     }
 
+    infersShiftForCapitalLetters()
+    {
+        const decoder = new TerminalEventDecoder();
+
+        assert.equal(decoder.decodeCharacter("A").shiftKey, true);
+        assert.equal(decoder.decodeCharacter("Ä").shiftKey, true);
+        assert.equal(decoder.decodeCharacter("a").shiftKey, false);
+    }
+
     prefersNamedKeysForAmbiguousControlCharacters()
     {
         const decoder = new TerminalEventDecoder();
