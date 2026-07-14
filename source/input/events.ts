@@ -119,11 +119,8 @@ export class TerminalMouseEvent<Type extends TerminalMouseEventType> extends Ter
 
 export class TerminalWheelEvent extends TerminalMouseEvent<"wheel"> implements WheelEventInfo
 {
-    static readonly DOM_DELTA_LINE = 1;
-
     readonly deltaX: number;
     readonly deltaY: number;
-    readonly deltaMode = TerminalWheelEvent.DOM_DELTA_LINE;
 
     constructor(init: Partial<WheelEventInfo> = {})
     {
@@ -138,5 +135,5 @@ export type TerminalInputEvent =
     CSIEvent |
     SS3Event |
     TerminalKeyboardEvent |
-    TerminalMouseEvent<TerminalMouseEventType> |
+    TerminalMouseEvent<Exclude<TerminalMouseEventType, "wheel">> |
     TerminalWheelEvent;

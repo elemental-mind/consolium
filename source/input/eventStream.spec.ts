@@ -104,10 +104,10 @@ export class TerminalEventDecoderTestSuite
     {
         const event = new TerminalEventDecoder().decodeCSISequence("<", "M", "64;3;8", "");
 
-        assert(event instanceof TerminalWheelEvent);
-        assert.equal(event.type, "wheel");
+        assert(event.type === "wheel");
         assert.equal(event.button, -1);
         assert.equal(event.deltaX, 0);
         assert.equal(event.deltaY, -1);
+        assert(event instanceof TerminalWheelEvent);
     }
 }
