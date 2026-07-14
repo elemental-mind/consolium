@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { TerminalEventDecoder } from "./eventStream.ts";
-import { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
+import { CSIEvent, SS3Event, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
 
 export class TerminalEventDecoderTestSuite
 {
@@ -24,7 +24,7 @@ export class TerminalEventDecoderTestSuite
 
     decodesModifiedNavigationKeys()
     {
-        const event = new TerminalEventDecoder().decodeCSI("A", "1;6", "", "");
+        const event = new TerminalEventDecoder().decodeCSISequence("", "A", "1;6", "");
 
         assert(event instanceof TerminalKeyboardEvent);
         assert.equal(event.key, "ArrowUp");
@@ -34,18 +34,44 @@ export class TerminalEventDecoderTestSuite
 
     decodesFunctionKeysFromSS3Sequences()
     {
-        const event = new TerminalEventDecoder().decodeSS3("P");
+        const event = new TerminalEventDecoder().decodeSS3Sequence("P");
 
         assert(event instanceof TerminalKeyboardEvent);
         assert.equal(event.key, "F1");
     }
 
+    emitsUnknownCSISequences()
+    {
+        const event = new TerminalEventDecoder().decodeCSISequence("?", "z", "12;3", "$");
+
+        assert(event instanceof CSIEvent);
+        assert.equal(event.instruction, "z");
+        assert.deepEqual(event.parameters, [12, 3]);
+        assert.equal(event.intermediates, "$");
+        assert.equal(event.namespaceMarker, "?");
+    }
+
+    emitsUnknownSS3Sequences()
+    {
+        const event = new TerminalEventDecoder().decodeSS3Sequence("x");
+
+        assert(event instanceof SS3Event);
+        assert.equal(event.instruction, "x");
+    }
+
+    emitsMalformedMouseSequencesAsCSIEvents()
+    {
+        const event = new TerminalEventDecoder().decodeCSISequence("<", "M", "0;1", "");
+
+        assert(event instanceof CSIEvent);
+    }
+
     decodesSeparateMouseEventsAndTracksButtonState()
     {
         const decoder = new TerminalEventDecoder();
-        const down = decoder.decodeCSI("M", "0;11;5", "", "<");
-        const move = decoder.decodeCSI("M", "32;13;6", "", "<");
-        const up = decoder.decodeCSI("m", "0;13;6", "", "<");
+        const down = decoder.decodeCSISequence("<", "M", "0;11;5", "");
+        const move = decoder.decodeCSISequence("<", "M", "32;13;6", "");
+        const up = decoder.decodeCSISequence("<", "m", "0;13;6", "");
 
         assert(down instanceof TerminalMouseEvent);
         assert.equal(down.type, "mousedown");
@@ -67,7 +93,7 @@ export class TerminalEventDecoderTestSuite
 
     decodesWheelWithoutChangingMouseButtonState()
     {
-        const event = new TerminalEventDecoder().decodeCSI("M", "64;3;8", "", "<");
+        const event = new TerminalEventDecoder().decodeCSISequence("<", "M", "64;3;8", "");
 
         assert(event instanceof TerminalWheelEvent);
         assert.equal(event.type, "wheel");

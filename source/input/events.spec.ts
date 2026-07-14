@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
+import { CSIEvent, SS3Event, TerminalEvent, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
 
 export class TerminalEventTestSuite
 {
@@ -12,19 +12,38 @@ export class TerminalEventTestSuite
         assert.equal(event.altKey, true);
         assert.equal(event.ctrlKey, true);
         assert.equal(event.shiftKey, false);
+        assert(event instanceof TerminalEvent);
+    }
+
+    exposesUnknownSequenceData()
+    {
+        const csi = new CSIEvent("z", [12, 3], "$", "?");
+        const ss3 = new SS3Event("x");
+
+        assert.equal(csi.type, "csi");
+        assert.equal(csi.instruction, "z");
+        assert.deepEqual(csi.parameters, [12, 3]);
+        assert.equal(csi.intermediates, "$");
+        assert.equal(csi.namespaceMarker, "?");
+        assert.equal(csi.altKey, false);
+        assert.equal(ss3.type, "ss3");
+        assert.equal(ss3.instruction, "x");
     }
 
     exposesTerminalCellCoordinates()
     {
         const event = new TerminalMouseEvent("mousemove", {
-            buttons: 1,
+            buttons: 5,
             column: 10,
             row: 4,
         });
 
         assert.equal(event.type, "mousemove");
         assert.equal(event.button, -1);
-        assert.equal(event.buttons, 1);
+        assert.equal(event.buttons, 5);
+        assert.equal(event.leftMouseButton, true);
+        assert.equal(event.middleMouseButton, true);
+        assert.equal(event.rightMouseButton, false);
         assert.equal(event.column, 10);
         assert.equal(event.row, 4);
     }
