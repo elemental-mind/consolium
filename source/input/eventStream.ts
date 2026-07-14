@@ -1,11 +1,12 @@
-import type { TerminalEvent, TerminalModifierState, TerminalMouseEventInit } from "./events.ts";
-import { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
-import { csiInstructionToKey, ss3Keys, tildeInstructionParamToKey } from "./mappings/csiCodesToKey.ts";
-import { TerminalInputStream } from "./rawStream.ts";
 import type { TerminalStream } from "./api.ts";
+import type { ModifierInfo, MouseEventInfo, TerminalInputEvent } from "./events.ts";
+import { CSIEvent, SS3Event, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
 import { namedCharacters } from "./mappings/charToKey.ts";
+import { csiInstructionToKey, tildeInstructionParamToKey } from "./mappings/csiCodesToKey.ts";
+import { ss3InstructionsToKey } from "./mappings/ss3CodesToKey.ts";
+import { TerminalInputStream } from "./rawStream.ts";
 
-export class TerminalEventStream implements TerminalStream<TerminalEvent>
+export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
 {
     static get isSupported()
     {
@@ -13,25 +14,23 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
     }
 
     private inputStream = new TerminalInputStream();
-    private decoder = new TerminalEventDecoder();
-    private eventStream?: AsyncGenerator<TerminalEvent, void>;
+    private eventDecoder = new TerminalEventDecoder();
+    private eventStream?: AsyncGenerator<TerminalInputEvent, void>;
 
-    get isOpen()
-    {
-        return this.eventStream !== undefined;
-    }
+    get isOpen() { return this.eventStream !== undefined; }
 
     open()
     {
-        if (this.isOpen)
-            return this;
-
         if (!TerminalEventStream.isSupported)
             throw new Error("TerminalEventStream requires an interactive TTY for stdin and stdout.");
 
-        this.decoder = new TerminalEventDecoder();
+        if (this.isOpen)
+            return this;
+
+        this.eventDecoder = new TerminalEventDecoder();
         this.inputStream.open();
         this.eventStream = this.parseEvents();
+
         return this;
     }
 
@@ -57,7 +56,7 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
         await eventStream.return(undefined);
     }
 
-    [Symbol.asyncIterator](): AsyncIterator<TerminalEvent>
+    [Symbol.asyncIterator](): AsyncIterator<TerminalInputEvent>
     {
         if (!this.eventStream)
             throw new Error("Can not iterate TerminalEventStream because it is closed.");
@@ -74,53 +73,40 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
                 if (char === "\x1b")
                     yield* this.parseEscapeSequence();
                 else
-                    yield this.decoder.decodeCharacter(char);
+                    yield this.eventDecoder.decodeCharacter(char);
         }
         finally
         {
-            this.eventStream = undefined;
             await this.inputStream.close();
+            this.eventStream = undefined;
         }
     }
 
     private async *parseEscapeSequence()
     {
-        // Terminal-generated escape sequences are expected to arrive in one stdin chunk.
-        // If no following character is already buffered in the input stream,
-        // treat Escape as a standalone key instead of an escape sequence.
+        // Terminal-generated escape sequences are expected to arrive in one multibyte stdin chunk.
+        // If ESC is the only byte in this chunk, we assume ESC was pressed.
         if (!this.inputStream.hasBufferedInput)
         {
-            yield this.decoder.decodeCharacter("\x1b");
+            yield this.eventDecoder.decodeCharacter("\x1b");
             return;
         }
 
         const charAfterEscape = await this.inputStream.read() as string;
         if (charAfterEscape === "[")
-        {
-            const event = await this.parseCSISequence();
-            if (event)
-                yield event;
-        }
+            yield* this.parseCSISequence();
         else if (charAfterEscape === "O")
-        {
-            const instruction = await this.inputStream.read();
-            if (instruction)
-            {
-                const event = this.decoder.decodeSS3(instruction);
-                if (event)
-                    yield event;
-            }
-        }
+            yield* this.parseSS3Sequence();
         else
-            yield this.decoder.decodeCharacter(charAfterEscape, { altKey: true });
+            yield this.eventDecoder.decodeCharacter(charAfterEscape, { altKey: true });
     }
 
     // To better understand CSI and its structure read the notes in the notes.md file: project/notes.md#control-sequence-introducer-csi
-    private async parseCSISequence()
+    private async *parseCSISequence()
     {
         let namespaceMarker = "";
-        let parameters = "";
-        let intermediates = "";
+        let parameterChars = "";
+        let intermediatesChars = "";
         let char: string | undefined;
 
         while ((char = await this.inputStream.read()) !== undefined)
@@ -129,17 +115,31 @@ export class TerminalEventStream implements TerminalStream<TerminalEvent>
 
             if (code >= 0x3c && code <= 0x3f)
                 namespaceMarker = char;
-            else if (code >= 0x30 && code <= 0x3f && intermediates.length === 0)
-                parameters += char;
+            else if (code >= 0x30 && code <= 0x3f && intermediatesChars.length === 0)
+                parameterChars += char;
             else if (code >= 0x20 && code <= 0x2f)
-                intermediates += char;
+                intermediatesChars += char;
             else if (code < 0x40 || code > 0x7e)
                 throw new Error(`Invalid character in CSI sequence: 0x${code.toString(16)}`);
             else
-                return this.decoder.decodeCSI(char, parameters, intermediates, namespaceMarker);
+            {
+                const instruction = char;
+                yield this.eventDecoder.decodeCSISequence(namespaceMarker, instruction, parameterChars, intermediatesChars);
+                return;
+            }
         }
 
         throw new Error("Incomplete CSI sequence.");
+    }
+
+    private async *parseSS3Sequence()
+    {
+        const ss3Instruction = await this.inputStream.read();
+
+        if (ss3Instruction)
+            yield this.eventDecoder.decodeSS3Sequence(ss3Instruction);
+        else
+            throw new Error("Incomplete SS3 sequence.");
     }
 }
 
@@ -147,14 +147,11 @@ export class TerminalEventDecoder
 {
     private buttons = 0;
 
-    decodeCharacter(value: string, modifiers: TerminalModifierState = {})
+    decodeCharacter(value: string, modifiers: Partial<ModifierInfo> = {})
     {
         const namedKey = namedCharacters.get(value);
         if (namedKey)
-        {
-            const ctrlKey = value === "\x00" ? true : modifiers.ctrlKey;
-            return new TerminalKeyboardEvent(namedKey, { ...modifiers, ctrlKey });
-        }
+            return new TerminalKeyboardEvent(namedKey, { ...modifiers, ctrlKey: value === "\x00" ? true : modifiers.ctrlKey });
 
         const code = value.charCodeAt(0);
         if (code >= 0x01 && code <= 0x1a)
@@ -166,90 +163,160 @@ export class TerminalEventDecoder
         return new TerminalKeyboardEvent(value, modifiers);
     }
 
-    decodeCSI(instruction: string, parameterString: string, intermediates: string, namespaceMarker: string)
+    decodeCSISequence(namespaceMarker: string, instruction: string, parameterString: string, intermediates: string)
     {
-        const parameters = parameterString.length
-            ? parameterString.split(";").map(parameter => parameter.length ? Number(parameter) : 0)
-            : [];
+        const parameters = parameterString.length ? parameterString.split(";").map(parameter => parameter.length ? Number(parameter) : 0) : [];
 
-        if (namespaceMarker === "<")
-            return this.decodeMouse(instruction, parameters);
+        let event;
+        if (namespaceMarker === "<" && (event = this.decodeMouseEvent(instruction, parameters)))
+            return event;
 
-        if (namespaceMarker || intermediates)
-            return undefined;
-
-        if (instruction === "Z")
-            return new TerminalKeyboardEvent("Tab", { shiftKey: true });
-
-        const directKey = csiInstructionToKey.get(instruction);
-        if (directKey)
-            return new TerminalKeyboardEvent(directKey, this.decodeModifiers(parameters[1]));
-
-        if (instruction === "~")
+        if (!namespaceMarker && !intermediates)
         {
-            const key = tildeInstructionParamToKey.get(parameters[0]);
-            if (key)
-                return new TerminalKeyboardEvent(key, this.decodeModifiers(parameters[1]));
+            let key;
+            switch (instruction)
+            {
+                case "Z":
+                    event = new TerminalKeyboardEvent("Tab", { shiftKey: true }); break;
+                case "~":
+                    if (key = tildeInstructionParamToKey.get(parameters[0]))
+                        event = new TerminalKeyboardEvent(key, this.decodeCSIModifierKeyState(parameters[1]));
+                    break;
+                default:
+                    if (key = csiInstructionToKey.get(instruction))
+                        event = new TerminalKeyboardEvent(key, this.decodeCSIModifierKeyState(parameters[1]));
+            }
         }
 
-        return undefined;
+        //If we don't have a recognized event (undefined) we return a generic CSI event
+        event ??= new CSIEvent(instruction, parameters, intermediates, namespaceMarker);
+        return event;
     }
 
-    decodeSS3(instruction: string)
+    decodeSS3Sequence(instruction: string)
     {
-        const key = ss3Keys.get(instruction);
-        return key ? new TerminalKeyboardEvent(key) : undefined;
+        const key = ss3InstructionsToKey.get(instruction);
+        return key ? new TerminalKeyboardEvent(key) : new SS3Event(instruction);
     }
 
-    private decodeModifiers(value = 1): TerminalModifierState
+    private decodeCSIModifierKeyState(xTermReportedValue = 1): ModifierInfo
     {
-        const modifiers = Math.max(0, value - 1);
+        //Xterm reports 1 + a modifier bitmask. After subtracting 1 the bitmask is as follows:
+        //  2 1 0
+        //  │ │ └─ Shift
+        //  │ └─── Alt
+        //  └───── Ctrl
+        //Clamp explicit zero so subtraction cannot produce -1, which has every bit set.
+        const modifiers = Math.max(0, xTermReportedValue - 1);
         return {
-            shiftKey: (modifiers & 1) !== 0,
-            altKey: (modifiers & 2) !== 0,
-            ctrlKey: (modifiers & 4) !== 0,
+            shiftKey: (modifiers & 0b001) !== 0,
+            altKey: (modifiers & 0b010) !== 0,
+            ctrlKey: (modifiers & 0b100) !== 0,
         };
     }
-    private decodeMouse(instruction: string, parameters: number[]): TerminalEvent | undefined
+
+    private decodeMouseEvent(instruction: string, parameters: number[]): TerminalInputEvent | undefined
     {
         if ((instruction !== "M" && instruction !== "m") || parameters.length < 3)
             return undefined;
 
-        const code = parameters[0];
-        const column = Math.max(0, parameters[1] - 1);
-        const row = Math.max(0, parameters[2] - 1);
-        const terminalButton = code & 3;
-        const isMotion = (code & 32) !== 0;
-        const isWheel = (code & 64) !== 0;
-        const button = terminalButton < 3 ? terminalButton : -1;
-        const buttonMask = button === 0 ? 1 : button === 1 ? 4 : button === 2 ? 2 : 0;
-        const init: TerminalMouseEventInit = {
-            button,
-            buttons: this.buttons,
-            column,
-            row,
-            shiftKey: (code & 4) !== 0,
-            altKey: (code & 8) !== 0,
-            ctrlKey: (code & 16) !== 0,
+        //Mouse event bitmask:
+        //  6 5 4 3 2 1 0
+        //  │ │ │ │ │ └─┴─ normally button encoding: 0 = left, 1 = middle, 2 = right, 3 = release / no button
+        //  | | | | |       └ In case of wheel event encodes scroll direction: 0 = Up, 1 = Down, 2 = left, 3 = right
+        //  │ │ │ │ └───── Shift
+        //  │ │ │ └─────── Alt
+        //  │ │ └───────── Ctrl
+        //  │ └─────────── move event
+        //  └───────────── wheel event
+        const statusByte = parameters[0];
+
+        const eventType = this.decodeEventType(instruction, statusByte);
+
+        const commonEventParameters: Omit<MouseEventInfo, "buttons" | "button"> = {
+            ...this.zeroBasedRowAndColumnFrom(parameters),       //column, row
+            ...this.decodeMouseModifierKeyStatus(statusByte),    //ctr, alt, shift
         };
 
-        if (isWheel)
+        switch (eventType)
         {
-            const deltaX = terminalButton === 2 ? -1 : terminalButton === 3 ? 1 : 0;
-            const deltaY = terminalButton === 0 ? -1 : terminalButton === 1 ? 1 : 0;
-            return new TerminalWheelEvent({ ...init, button: -1, deltaX, deltaY });
+            case "mousemove":
+                return new TerminalMouseEvent(eventType, { button: -1, buttons: this.buttons, ...commonEventParameters });
+            case "wheel":
+                return new TerminalWheelEvent({ button: -1, buttons: this.buttons, ...this.scrollDeltas(statusByte), ...commonEventParameters });
+            case "mousedown":
+                {
+                    const { button, buttonBitFlag } = this.buttonAndButtonFlag(statusByte);
+                    this.buttons |= buttonBitFlag;
+                    return new TerminalMouseEvent(eventType, { button, buttons: this.buttons, ...commonEventParameters });
+                }
+            case "mouseup":
+                {
+                    const { button, buttonBitFlag } = this.buttonAndButtonFlag(statusByte);
+                    this.buttons &= ~buttonBitFlag;
+                    return new TerminalMouseEvent(eventType, { button, buttons: this.buttons, ...commonEventParameters });
+                }
         }
+    }
 
-        if (isMotion)
-            return new TerminalMouseEvent("mousemove", { ...init, button: -1 });
-
+    private decodeEventType(instruction: string, stateBitMask: number)
+    {
+        if ((stateBitMask & 0b0100000) !== 0)
+            return "mousemove";
+        if ((stateBitMask & 0b1000000) !== 0)
+            return "wheel";
+        if (instruction === "M")
+            return "mousedown";
         if (instruction === "m")
+            return "mouseup";
+        else
+            throw new Error("Unknown mouse event type");
+    }
+
+    private decodeMouseModifierKeyStatus(stateBitMask: number)
+    {
+        return { shiftKey: (stateBitMask & 0b0000100) !== 0, altKey: (stateBitMask & 0b0001000) !== 0, ctrlKey: (stateBitMask & 0b0010000) !== 0 };
+    }
+
+    private buttonAndButtonFlag(stateBitMask: number)
+    {
+        const buttonState = stateBitMask & 0b0000011;
+        //Button values:
+        //          left  middle  right  none
+        //xterm:      0      1      2      3
+        //ours:       0      1      2     -1
+        const button = buttonState === 3 ? -1 : buttonState;
+        //Recall our button mask layout:
+        // 2 1 0
+        // │ │ └─ left
+        // │ └─── right
+        // └───── middle
+        const buttonBitFlag = button === 0 ? 0b001 : button === 1 ? 0b100 : button === 2 ? 0b010 : 0;
+
+        return { button, buttonBitFlag };
+    }
+
+    private scrollDeltas(stateBitMask: number)
+    {
+        const scrollDirection = stateBitMask & 0b0000011;
+
+        let deltaX = 0;
+        let deltaY = 0;
+        switch (scrollDirection)
         {
-            this.buttons &= ~buttonMask;
-            return new TerminalMouseEvent("mouseup", { ...init, buttons: this.buttons });
+            case 0: deltaY = -1; break; //Up
+            case 1: deltaY = 1; break;  //Down
+            case 2: deltaX = -1; break; //Left
+            case 3: deltaX = 1; break;  //Right
         }
 
-        this.buttons |= buttonMask;
-        return new TerminalMouseEvent("mousedown", { ...init, buttons: this.buttons });
+        return { deltaX, deltaY };
+    }
+
+    private zeroBasedRowAndColumnFrom(parameters: number[])
+    {
+        //Reported terminal cell coordinates are 1-based. We need to offset them for a normalized repr.
+        const [, oneBasedColumn, oneBasedRow] = parameters;
+        return { column: oneBasedColumn - 1, row: oneBasedRow - 1 };
     }
 }

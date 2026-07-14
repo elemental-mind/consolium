@@ -1,5 +1,5 @@
-export { TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
-export type { TerminalEvent, TerminalModifierState, TerminalMouseEventInit, TerminalMouseEventType, TerminalWheelEventInit } from "./events.ts";
+export { CSIEvent, SS3Event, TerminalEvent, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./events.ts";
+export type { ModifierInfo, MouseEventInfo, TerminalInputEvent, TerminalMouseEventType, WheelEventInfo } from "./events.ts";
 export { TerminalEventStream } from "./eventStream.ts";
 export { TerminalInputStream } from "./rawStream.ts";
 
