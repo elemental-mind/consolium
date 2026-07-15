@@ -1,17 +1,17 @@
 {
-  "name": "terminalium",
+  "name": "consolium",
   "version": "0.1.0",
   "description": "",
   "keywords": [],
   "license": "MIT",
   "type": "module",
-  "types": "./distribution/npm/terminalium.d.ts",
-  "module": "./distribution/npm/terminalium.js",
-  "main": "./distribution/npm/terminalium.js",
+  "types": "./distribution/npm/consolium.d.ts",
+  "module": "./distribution/npm/consolium.js",
+  "main": "./distribution/npm/consolium.js",
   "exports": {
     ".": {
-      "types": "./distribution/npm/terminalium.d.ts",
-      "import": "./distribution/npm/terminalium.js"
+      "types": "./distribution/npm/consolium.d.ts",
+      "import": "./distribution/npm/consolium.js"
     }
   },
   "author": "Magnus Meseck",
@@ -20,9 +20,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/elemental-mind/terminalium.git"
+    "url": "git+https://github.com/elemental-mind/consolium.git"
   },
-  "homepage": "https://github.com/elemental-mind/terminalium#readme",
+  "homepage": "https://github.com/elemental-mind/consolium#readme",
   "scripts": {
     "check": "tsc --noemit",
     "test": "unitium-tsx ./source",
