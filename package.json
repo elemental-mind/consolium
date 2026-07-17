@@ -25,6 +25,7 @@
   "homepage": "https://github.com/elemental-mind/terminalium#readme",
   "scripts": {
     "test": "unitium-tsx ./source",
+    "visual": "node test/visual/formatting.ts",
     "build:npm": "node project/scripts/build-npm-package.ts",
     "build:jsr": "node project/scripts/build-jsr-package.ts",
     "publish:npm": "git push --follow-tags && node project/scripts/build-npm-package.ts && npm publish",

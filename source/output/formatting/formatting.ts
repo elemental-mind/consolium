@@ -102,12 +102,14 @@ class FormattingSettings
     {
         const escapeCodes = [];
         for (const [key, setting] of Object.entries(this.settings))
+            // We route color settings (foreground, background) to escape sequence decoder
             if (key.endsWith("ground"))
                 escapeCodes.push(...mapColorToEscapeCodeSequence(setting, key === "background"));
-            else if (setting === true)
+            // Text style settings are boolean and their escape code can be read directly from the encoding Object
+            else if (setting)
                 escapeCodes.push(TextStyles[key as TextStyle]);
 
-        if (escapeCodes.length === 0)
+        if (!escapeCodes.length)
             return value;
 
         return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
