@@ -1,17 +1,15 @@
-import { Colors, type Color } from "./color.ts";
+import { Colors, mapColorToEscapeCodeSequence as getColorEscapeCode, mapColorToEscapeCodeSequence, type Color, type ColorValue, type HexColor } from "./color.ts";
 import { TextStyles, type TextStyle } from "./textStyle.ts";
-
-export type HexColor = `#${string}`;
-export type ColorValue = Color | HexColor;
 
 type ColourHexCodeLiteral = (strings: TemplateStringsArray, ...substitutions: (string | number)[]) => FormattingAPI;
 type FormattingAPI =
     {
-        [possibleSetting in (Color | `bg${keyof typeof Colors}` | TextStyle)]: FormattingAPI;
+        [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI;
     } &
     {
         fg: ColourHexCodeLiteral;
         bg: ColourHexCodeLiteral;
+        format(value: string): string;
         merge(overrides: FormattingAPI | FormattingInfo): FormattingAPI;
         readonly settings: FormattingInfo;
     };
@@ -52,10 +50,15 @@ class FormattingSettings
 
     private static addFluentAPIMembers()
     {
-        for (const [name, color] of Object.entries(Colors))
-            this.defineFormattingProperty(color, { foreground: color }), this.defineFormattingProperty(`bg${name}`, { background: color });
+        for (const color of Object.keys(Colors) as Color[])
+        {
+            const backgroundColor = `bg${color[0].toUpperCase()}${color.slice(1)}`;
 
-        for (const style of Object.values(TextStyles))
+            this.defineFormattingProperty(color, { foreground: color });
+            this.defineFormattingProperty(backgroundColor, { background: color });
+        }
+
+        for (const style of Object.keys(TextStyles) as TextStyle[])
             this.defineFormattingProperty(style, { [style]: true });
     }
 
@@ -77,8 +80,8 @@ class FormattingSettings
         return new FormattingSettings().bg(strings, ...substitutions);
     }
 
-    private shouldCloneOnChange = true;
     settings: FormattingInfo = {};
+    private shouldCloneOnChange = true;
 
     constructor(settings: FormattingInfo = {})
     {
@@ -93,6 +96,21 @@ class FormattingSettings
     bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
         return this.with({ background: this.getLiteralColour(strings, substitutions) });
+    }
+
+    format(value: string)
+    {
+        const escapeCodes = [];
+        for (const [key, setting] of Object.entries(this.settings))
+            if (key.endsWith("ground"))
+                escapeCodes.push(...mapColorToEscapeCodeSequence(setting, key === "background"));
+            else if (setting === true)
+                escapeCodes.push(TextStyles[key as TextStyle]);
+
+        if (escapeCodes.length === 0)
+            return value;
+
+        return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
     }
 
     merge(overrideFormatting: FormattingAPI | FormattingInfo)
@@ -136,7 +154,7 @@ class FormattingSettings
 
 //We add the hasInstance member to support instanceof operator type inference
 type FormattingClass =
-    { [possibleSetting in (Color | `bg${keyof typeof Colors}` | TextStyle)]: FormattingAPI; } &
+    { [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI; } &
     {
         fg: ColourHexCodeLiteral;
         bg: ColourHexCodeLiteral;

@@ -1,11 +1,11 @@
-export type TextStyle = typeof TextStyles[keyof typeof TextStyles];
+export type TextStyle = keyof typeof TextStyles;
 export const TextStyles = {
-    Bold: "bold",
-    Dimmed: "dimmed",
-    Italic: "italic",
-    Underlined: "underlined",
-    Blinking: "blinking",
-    Inverted: "inverted",
-    Hidden: "hidden",
-    Strikethrough: "strikethrough",
+    bold: 1,
+    dimmed: 2,
+    italic: 3,
+    underlined: 4,
+    blinking: 5,
+    inverted: 7,
+    hidden: 8,
+    strikethrough: 9,
 } as const;

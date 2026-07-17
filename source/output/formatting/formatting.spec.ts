@@ -136,4 +136,27 @@ export class FormattingChainingTests
             italic: true,
         });
     }
+
+    formatsStringsWithNamedColorsAndTextStyles()
+    {
+        const formatted = Formatting.red.bgBlue.bold.underlined.format("important");
+
+        assert.equal(formatted, "\u001B[31;44;1;4mimportant\u001B[0m");
+    }
+
+    formatsStringsWithFullAndAbbreviatedHexColors()
+    {
+        const formatted = Formatting.fg`#FF00A1`.bg`#1A2`.format("custom");
+
+        assert.equal(formatted, "\u001B[38;2;255;0;161;48;2;17;170;34mcustom\u001B[0m");
+    }
+
+    omitsDisabledStylesWhenFormattingStrings()
+    {
+        const formatted = Formatting.green.bold.italic
+            .merge({ bold: false })
+            .format("ready");
+
+        assert.equal(formatted, "\u001B[32;3mready\u001B[0m");
+    }
 }
