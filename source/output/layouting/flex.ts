@@ -46,18 +46,8 @@ export interface FlexGrowConfiguration
      */
     readonly filler: Filler;
 
-    /** Minimum emitted width in visible terminal columns. Defaults to zero. */
-    readonly min?: number;
-
     /** Maximum emitted width in visible terminal columns. Defaults to unbounded. */
     readonly max?: number;
-
-    /**
-     * Higher values receive available space before lower values. Growth contexts
-     * with equal importance share space according to `flexFactor`. Defaults to
-     * zero.
-     */
-    readonly contentImportance?: number;
 
     /**
      * Relative amount of growth among contexts with equal content importance.
@@ -113,16 +103,13 @@ export const Flex = FlexBoundary as FlexAPI;
 
 export class ShrinkContext implements FlexShrinkConfiguration
 {
-    readonly truncator!: Truncator;
-    readonly preserve?: number;
-    readonly contentImportance?: number;
-    readonly flexFactor?: number;
-    readonly direction: "left" | "right";
+    truncator!: Truncator;
+    preserve = 0;
+    contentImportance = 0;
+    flexFactor = 1;
+    direction: "left" | "right";
 
-    constructor(
-        truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...",
-        direction: "left" | "right" = "left",
-    )
+    constructor(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...", direction: "left" | "right" = "left")
     {
         this.direction = direction;
 
@@ -168,11 +155,9 @@ export class ShrinkContext implements FlexShrinkConfiguration
 
 export class GrowthContext implements FlexGrowConfiguration
 {
-    readonly filler!: Filler;
-    readonly min?: number;
-    readonly max?: number;
-    readonly contentImportance?: number;
-    readonly flexFactor?: number;
+    filler!: Filler;
+    max?: number;
+    flexFactor = 1;
 
     constructor(growthElementOrConfig: FlexGrowConfiguration | Filler = " ")
     {
