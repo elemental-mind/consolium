@@ -1,18 +1,7 @@
-import { Colors, mapColorToEscapeCodeSequence as getColorEscapeCode, mapColorToEscapeCodeSequence, type Color, type ColorValue, type HexColor } from "./color.ts";
+import { Colors, mapColorToEscapeCodeSequence, type Color, type ColorValue, type HexColor } from "./color.ts";
 import { TextStyles, type TextStyle } from "./textStyle.ts";
 
-type ColourHexCodeLiteral = (strings: TemplateStringsArray, ...substitutions: (string | number)[]) => FormattingAPI;
-type FormattingAPI =
-    {
-        [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI;
-    } &
-    {
-        fg: ColourHexCodeLiteral;
-        bg: ColourHexCodeLiteral;
-        format(value: string): string;
-        merge(overrides: FormattingAPI | FormattingInfo): FormattingAPI;
-        readonly settings: FormattingInfo;
-    };
+type ColourCodeStringLiteral = (strings: TemplateStringsArray, ...substitutions: (string | number)[]) => FormattingAPI;
 
 export interface FormattingInfo
 {
@@ -28,7 +17,15 @@ export interface FormattingInfo
     strikethrough?: boolean;
 }
 
-class FormattingSettings
+export type FormattingAPI =
+    {
+        [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI;
+    } & {
+        fg: ColourCodeStringLiteral;
+        bg: ColourCodeStringLiteral;
+    };
+
+export class FormattingSettings
 {
     //---------------
     // Setup part for adding fluent API members
@@ -41,10 +38,7 @@ class FormattingSettings
         });
         Object.defineProperty(FormattingSettings.prototype, name, {
             configurable: false, enumerable: false,
-            get(this: FormattingSettings) 
-            {
-                return this.with(settings);
-            }
+            get(this: FormattingSettings) { return this.apply(settings); }
         });
     };
 
@@ -70,6 +64,15 @@ class FormattingSettings
     // Normal class members
     //---------------------------
 
+    static None = new FormattingSettings();
+
+    static fromMerged(baseFormatting: FormattingSettings, overrideFormatting: FormattingSettings)
+    {
+        const mergedFormatting = new FormattingSettings({ ...baseFormatting.settings, ...overrideFormatting.settings });
+        mergedFormatting.shouldCloneOnChange = false;
+        return mergedFormatting;
+    }
+
     static fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
         return new FormattingSettings().fg(strings, ...substitutions);
@@ -88,18 +91,28 @@ class FormattingSettings
         this.settings = settings;
     }
 
+    get isNullFormatting()
+    {
+        for (const key in this.settings)
+            if (this.settings[key as keyof typeof this.settings] !== false) return false;
+        return true;
+    }
+
     fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
-        return this.with({ foreground: this.getLiteralColour(strings, substitutions) });
+        return this.apply({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) });
     }
 
     bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
-        return this.with({ background: this.getLiteralColour(strings, substitutions) });
+        return this.apply({ background: this.getColorStringFromStringLiteral(strings, substitutions) });
     }
 
     format(value: string)
     {
+        if (this.isNullFormatting)
+            return value;
+
         const escapeCodes = [];
         for (const [key, setting] of Object.entries(this.settings))
             // We route color settings (foreground, background) to escape sequence decoder
@@ -109,24 +122,10 @@ class FormattingSettings
             else if (setting)
                 escapeCodes.push(TextStyles[key as TextStyle]);
 
-        if (!escapeCodes.length)
-            return value;
-
         return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
     }
 
-    merge(overrideFormatting: FormattingAPI | FormattingInfo)
-    {
-        const overrideSettings: FormattingInfo = overrideFormatting instanceof FormattingSettings
-            ? (overrideFormatting as FormattingAPI).settings
-            : overrideFormatting as FormattingInfo;
-        const mergedFormatting = new FormattingSettings({ ...this.settings, ...overrideSettings });
-
-        mergedFormatting.shouldCloneOnChange = false;
-        return mergedFormatting;
-    }
-
-    private with(settings: FormattingInfo)
+    private apply(settings: FormattingInfo)
     {
         if (this.shouldCloneOnChange)
         {
@@ -139,12 +138,13 @@ class FormattingSettings
         return this;
     }
 
-    private getLiteralColour(strings: TemplateStringsArray, substitutions: (string | number)[]): HexColor
+    private getColorStringFromStringLiteral(stringLiteralStaticParts: TemplateStringsArray, stringLiteralDynamicParts: (string | number)[]): HexColor
     {
-        let color = strings[0];
+        let color = stringLiteralStaticParts[0];
 
-        for (let index = 0; index < substitutions.length; index++)
-            color += substitutions[index] + strings[index + 1];
+        //We zip static parts and dynamic parts. Dynamic parts are always enclosed in static parts.
+        for (let index = 0; index < stringLiteralDynamicParts.length; index++)
+            color += stringLiteralDynamicParts[index] + stringLiteralStaticParts[index + 1];
 
         // Accept three- or six-digit hexadecimal RGB colors, such as #FFF or #FFFFFF.
         if (!/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(color))
@@ -154,12 +154,4 @@ class FormattingSettings
     }
 };
 
-//We add the hasInstance member to support instanceof operator type inference
-type FormattingClass =
-    { [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI; } &
-    {
-        fg: ColourHexCodeLiteral;
-        bg: ColourHexCodeLiteral;
-        [Symbol.hasInstance](value: unknown): value is FormattingAPI;
-    };
-export const Formatting: FormattingClass = FormattingSettings as any;
+export const Formatting = FormattingSettings as any as FormattingAPI;
