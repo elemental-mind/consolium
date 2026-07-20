@@ -6,18 +6,27 @@ export interface FlexAPI
 }
 
 export type Truncator = string | TruncationHandler;
-export type TruncationHandler = (text: string, targetWidth: number) => string;
+export type TruncationHandler = (fragments: string[], shrinkLength: number) => string[];
 
 export interface FlexShrinkConfiguration
 {
     /**
-     * A truncator like "..." or (string, width) => string.substring(...)
+     * A truncator like "..." or (string[], lenghtToShrink) => strings.map...
+     * 
+     * A custom truncator must work with string fragments as strings may be split by fromatting boundaries.
+     * Because it is imperative to know which part of the formatted string belongs to which formatting the truncator
+     * must return a string[] in the same shape as the given one.
+     * Each string element must be mapped to its shortened form. Either dropped, fully preserved, or shortened. 
      */
     readonly truncator: Truncator;
 
     /**
-     * Minimum number of visible columns allocated to this context, including
-     * any truncation marker. Defaults to zero.
+     * Minimum number of visible columns allocated to this context, _including
+     * any truncation marker_. Defaults to 3.
+     *
+     * If you supply a custom truncator, this informs about the max truncation
+     * capacity of the truncator. If a truncator leaves at leaset 3 letters and
+     * adds "...", preserve should be set to 6.
      */
     readonly preserve?: number;
 
@@ -45,6 +54,9 @@ export interface FlexGrowConfiguration
      * a string of the required length like (width) => "-".repeat(width)
      */
     readonly filler: Filler;
+
+    /** Higher values grow first when more line size is needed. */
+    readonly fillPriority?: number;
 
     /** Maximum emitted width in visible terminal columns. Defaults to unbounded. */
     readonly max?: number;
@@ -104,7 +116,7 @@ export const Flex = FlexBoundary as FlexAPI;
 export class ShrinkContext implements FlexShrinkConfiguration
 {
     truncator!: Truncator;
-    preserve = 0;
+    preserve = 3;
     contentImportance = 0;
     flexFactor = 1;
     direction: "left" | "right";
@@ -117,45 +129,82 @@ export class ShrinkContext implements FlexShrinkConfiguration
             Object.assign(this, truncatorOrConfig);
         else
             this.truncator = truncatorOrConfig;
+
+        if (typeof this.truncator === "string" && this.truncator.length > this.preserve)
+            throw new RangeError("The truncator cannot be longer than the preserved content.");
     }
 
-    shrink(fragments: string[], shrinkBy: number)
+    shrink(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
     {
-        if (fragments.length === 0)
-            return [];
+        if (startIndexInclusive === endIndexExclusive) return;
 
-        const text = fragments.join("");
-        const normalizedShrink = Math.min(text.length, Math.max(0, shrinkBy));
+        if (typeof this.truncator === "string")
+            this.useDefaultTruncator(truncationTarget, startIndexInclusive, endIndexExclusive, shrinkBy);
+        else
+            this.useCustomTruncator(truncationTarget, startIndexInclusive, endIndexExclusive, shrinkBy);
 
-        if (normalizedShrink === 0)
-            return [...fragments];
-
-        const targetLength = text.length - normalizedShrink;
-        const truncated = this.truncate(text, targetLength);
-        const result = fragments.map(() => "");
-
-        result[this.direction === "left" ? 0 : result.length - 1] = truncated;
-        return result;
+        return truncationTarget;
     }
 
-    private truncate(text: string, targetLength: number)
+    private useDefaultTruncator(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
     {
-        if (typeof this.truncator === "function")
-            return this.truncator(text, targetLength);
+        const truncator = this.truncator as string;
 
-        if (targetLength <= this.truncator.length)
-            return this.truncator.slice(0, targetLength);
+        // The truncator is added again, so remove enough input to make room for it.
+        let truncationLength = shrinkBy + truncator.length;
+        const [start, end, step] = this.direction === "left"
+            ? [endIndexExclusive - 1, startIndexInclusive - 1, -1]
+            : [startIndexInclusive, endIndexExclusive, 1];
 
-        const retainedLength = targetLength - this.truncator.length;
-        return this.direction === "left"
-            ? text.slice(0, retainedLength) + this.truncator
-            : this.truncator + text.slice(text.length - retainedLength);
+        for (let index = start; index !== end; index += step)
+        {
+            const chunk = truncationTarget[index];
+
+            if (chunk.length === 0)
+                continue;
+
+            if (chunk.length < truncationLength)
+            {
+                truncationLength -= chunk.length;
+                truncationTarget[index] = "";
+                continue;
+            }
+
+            if (chunk.length === truncationLength)
+            {
+                truncationTarget[index] = truncator;
+                return;
+            }
+
+            if (chunk.length > truncationLength)
+            {
+                if (this.direction === "left")
+                    truncationTarget[index] = chunk.slice(0, -truncationLength) + truncator;
+                else
+                    truncationTarget[index] = truncator + chunk.slice(truncationLength);
+
+                return;
+            }
+        }
+    }
+
+    private useCustomTruncator(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
+    {
+        const fragments = truncationTarget.slice(startIndexInclusive, endIndexExclusive);
+        const resultFragments = (this.truncator as TruncationHandler)(fragments, shrinkBy);
+
+        if (resultFragments.length !== fragments.length)
+            throw new RangeError("A custom truncator must return the same number of fragments it received.");
+
+        for (let index = 0; index < resultFragments.length; index++)
+            truncationTarget[startIndexInclusive + index] = resultFragments[index];
     }
 }
 
 export class GrowthContext implements FlexGrowConfiguration
 {
     filler!: Filler;
+    fillPriority = 0;
     max?: number;
     flexFactor = 1;
 
