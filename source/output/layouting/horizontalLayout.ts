@@ -64,7 +64,33 @@ export class HorizontalLayout
 
     private growToSize(targetLength: number): string[]
     {
-        throw new Error("Method not implemented.");
+        let remainingGrowth = targetLength - this.unformattedWidth;
+        const fillTarget = [...this.normalizedStrings];
+
+        const fillersByPriority = new Map<number, FlexRange[]>();
+        for (const range of this.flexRanges)
+            if (range.filler)
+                fillersByPriority.get(range.filler.fillPriority)?.push(range) ?? fillersByPriority.set(range.filler.fillPriority, [range]);
+
+        const priorityGroups = [...fillersByPriority.entries()].sort(([priority1], [priority2]) => priority2 - priority1).map(([priority, ranges]) => ranges);
+
+        for (const ranges of priorityGroups)
+        {
+            if (ranges.length === 1)
+            {
+                const range = ranges[0];
+                const lengthToAdd = range.filler!.max ? Math.min(range.filler!.max!, remainingGrowth) : remainingGrowth;
+
+                fillTarget[range.startIndex] = range.filler!.fill(lengthToAdd);
+                remainingGrowth -= lengthToAdd;
+            }
+            else
+                remainingGrowth -= this.distributeGrowth(fillTarget, ranges, remainingGrowth);
+
+            if (remainingGrowth === 0) break;
+        }
+
+        return fillTarget;
     }
 
     private formatStrings(adjustedStrings: string[]): string
@@ -145,8 +171,140 @@ export class HorizontalLayout
 
     private distributeTruncation(ranges: FlexRange[], truncationTarget: string[], truncationLength: number)
     {
-        throw new Error("Method not implemented.");
+        const factors = ranges.map(range => range.truncator!.flexFactor);
+        const distribution = ranges.map(() => 0);
+        const activeRangeIndices = new Set<number>();
+
+        let totalCapacity = 0;
+        for (const [index, range] of ranges.entries())
+        {
+            totalCapacity += range.truncationCapacity;
+            if (range.truncationCapacity > 0)
+                activeRangeIndices.add(index);
+            else
+                factors[index] = 0;
+        }
+
+        let remainingTruncation = Math.min(truncationLength, totalCapacity);
+
+        // Allocate by flex factor. If a range reaches its preservation limit,
+        // redistribute its excess share among the ranges that can still shrink.
+        while (remainingTruncation > 0 && activeRangeIndices.size > 0)
+        {
+            const shares = this.distributeInteger(remainingTruncation, factors);
+            remainingTruncation = 0;
+
+            for (const index of activeRangeIndices)
+            {
+                const rangeCapacity = ranges[index].truncationCapacity;
+                const newAttribution = distribution[index] + shares[index];
+
+                if (newAttribution >= rangeCapacity)
+                {
+                    distribution[index] = rangeCapacity;
+                    remainingTruncation += newAttribution - rangeCapacity;
+                    activeRangeIndices.delete(index);
+                    factors[index] = 0;
+                }
+                else
+                    distribution[index] = newAttribution;
+            }
+        }
+
+        let effectivelyRemovedCharCount = 0;
+        for (const [index, range] of ranges.entries())
+            effectivelyRemovedCharCount += range.truncate(truncationTarget, distribution[index]);
+
         return effectivelyRemovedCharCount;
+    }
+
+    private distributeGrowth(fillTarget: string[], ranges: FlexRange[], remainingGrowth: number)
+    {
+        const factors: number[] = [];
+        const distribution: number[] = [];
+        const cappedRangeIndices = new Set<number>();
+        let allRangesCapped = false;
+
+        for (const [index, range] of ranges.entries())
+        {
+            const filler = range.filler!;
+            factors.push(filler.flexFactor);
+            if (filler.max) cappedRangeIndices.add(index);
+        }
+
+        if (cappedRangeIndices.size === ranges.length)
+            allRangesCapped = true;
+
+        //We iterate multiple times by filling the distribution, then capping it at maxes - then iterating again with the excess sum until
+        //there is nothing to distribute anymore or all values are capped.
+        //the second part is a special case. When all ranges were capped, but none are left to fill we abort and report the remaining growth back to the caller.
+        while (remainingGrowth && !(allRangesCapped && cappedRangeIndices.size === 0))
+        {
+            for (const [index, difference] of this.distributeInteger(remainingGrowth, factors).entries())
+                distribution[index] += difference;
+            remainingGrowth = 0;
+
+            if (cappedRangeIndices.size)
+            {
+                //If we have capped value indices left, we need to check whether the updated distribution exceeds them
+                for (const index of cappedRangeIndices)
+                {
+                    const attributedValue = distribution[index];
+                    const maxValue = ranges[index].filler!.max!;
+
+                    if (attributedValue > maxValue)
+                    {
+                        //If we exceed the capacity of a range we ...
+                        //... don't come back to check the cap in the next round
+                        cappedRangeIndices.delete(index);
+                        //... stop allocating growth to it
+                        factors[index] = 0;
+                        //... cap it
+                        distribution[index] = maxValue;
+                        //... and add the excess to be redistributed in the next round
+                        remainingGrowth += attributedValue - maxValue;
+                    }
+                }
+            }
+        }
+
+        for (const [index, range] of ranges.entries())
+            range.grow(fillTarget, distribution[index]);
+
+        return remainingGrowth;
+    }
+
+    private distributeInteger(amount: number, factors: number[]): number[]
+    {
+        let total = 0;
+        for (const factor of factors) total += factor;
+
+        const distribution: number[] = [];
+        const roundingErrors: number[] = [];
+        const indices: number[] = [];
+
+        let remainingToDistribute = amount;
+        for (let index = 0; index < factors.length; index++)
+        {
+            const idealAttribution = factors[index] * amount / total;
+            const actualAttribution = Math.floor(idealAttribution);
+
+            distribution.push(actualAttribution);
+            roundingErrors.push(idealAttribution - actualAttribution);
+            indices.push(index);
+
+            remainingToDistribute -= actualAttribution;
+        }
+
+        // We sort by remainder size - but only keep track of indices
+        indices.sort((leftIndex, rightIndex) => roundingErrors[rightIndex] - roundingErrors[leftIndex]);
+
+        // We might have an integer amount left to be dsitributed. 
+        // The candidates with the biggest errors each get one added until the remainder is exhausted.
+        for (let index = 0; index < remainingToDistribute; index++)
+            distribution[indices[index]]++;
+
+        return distribution;
     }
 }
 
@@ -240,6 +398,16 @@ export class FlexRange extends Range<FlexRange>
         if (this.truncator) throw new RangeError("A FlexRange can only have one truncator. Choose either shrinkLeft() or shrinkRight().");
 
         this.truncator = truncator;
+    }
+
+    grow(growthTarget: string[], growBy: number)
+    {
+        const filler = this.filler!;
+        const possibleGrowth = Math.min(growBy, filler.max ?? Infinity);
+
+        growthTarget[this.startIndex] = filler.fill(possibleGrowth);
+
+        return possibleGrowth;
     }
 
     truncate(truncationTarget: string[], truncateBy: number)
