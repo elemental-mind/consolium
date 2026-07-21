@@ -55,7 +55,7 @@ export interface FlexGrowConfiguration
      */
     readonly filler: Filler;
 
-    /** Higher values grow first when more line size is needed. */
+    /** Higher values grow first when more line size is needed. Defaults to zero. */
     readonly fillPriority?: number;
 
     /** Maximum emitted width in visible terminal columns. Defaults to unbounded. */
@@ -205,14 +205,14 @@ export class GrowthContext implements FlexGrowConfiguration
 {
     filler!: Filler;
     fillPriority = 0;
-    max?: number;
     flexFactor = 1;
+    max = Infinity;
 
     constructor(growthElementOrConfig: FlexGrowConfiguration | Filler = " ")
     {
         if (typeof growthElementOrConfig === "object")
             Object.assign(this, growthElementOrConfig);
-        else if (this.filler.length)
+        else if (typeof growthElementOrConfig === "function" || (typeof growthElementOrConfig === "string" && this.filler.length > 0))
             this.filler = growthElementOrConfig;
         else
             throw new Error("Filler not valid.");
