@@ -212,8 +212,10 @@ export class GrowthContext implements FlexGrowConfiguration
     {
         if (typeof growthElementOrConfig === "object")
             Object.assign(this, growthElementOrConfig);
-        else
+        else if (this.filler.length)
             this.filler = growthElementOrConfig;
+        else
+            throw new Error("Filler not valid.");
     }
 
     fill(length: number)
@@ -223,9 +225,6 @@ export class GrowthContext implements FlexGrowConfiguration
 
         if (length === 0)
             return "";
-
-        if (this.filler.length === 0)
-            throw new RangeError("A string filler cannot be empty when growth is required.");
 
         return this.filler.repeat(Math.ceil(length / this.filler.length)).slice(0, length);
     }
