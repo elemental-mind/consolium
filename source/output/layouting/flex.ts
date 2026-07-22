@@ -212,7 +212,7 @@ export class GrowthContext implements FlexGrowConfiguration
     {
         if (typeof growthElementOrConfig === "object")
             Object.assign(this, growthElementOrConfig);
-        else if (typeof growthElementOrConfig === "function" || (typeof growthElementOrConfig === "string" && this.filler.length > 0))
+        else if (typeof growthElementOrConfig === "function" || (typeof growthElementOrConfig === "string" && growthElementOrConfig.length > 0))
             this.filler = growthElementOrConfig;
         else
             throw new Error("Filler not valid.");
