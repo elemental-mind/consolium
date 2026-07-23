@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { Formatting } from "./formatting.ts";
+import { Formatting as FormattingWithPublicAPI, FormattingSettings, type FormattingAPI } from "./formatting.ts";
+
+type FormattingWithInternalAPI = {
+    [K in keyof FormattingAPI]: FormattingAPI[K] extends FormattingAPI ? FormattingWithInternalAPI
+    : FormattingAPI[K] extends ((...args: infer Arguments) => infer Result extends FormattingAPI) ? ((...args: Arguments) => FormattingWithInternalAPI)
+    : FormattingAPI[K]
+} & FormattingSettings;
+
+const Formatting = FormattingWithPublicAPI as unknown as FormattingWithInternalAPI;
 
 export class FormattingChainingTests
 {
@@ -87,9 +95,9 @@ export class FormattingChainingTests
         ];
 
         for (const formatting of formattingResults)
-            assert(formatting instanceof Formatting);
+            assert(formatting instanceof FormattingSettings);
 
-        assert(!({ settings: {} } instanceof Formatting));
+        assert(!({ settings: {} } instanceof FormattingSettings));
     }
 
     mergesFormattingForEmbeddedContexts()
@@ -115,7 +123,7 @@ export class FormattingChainingTests
             foreground: "red",
             underlined: true,
         });
-        assert(embedded instanceof Formatting);
+        assert(embedded instanceof FormattingSettings);
     }
 
     mergesRawOverridesIncludingDisabledStyles()

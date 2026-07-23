@@ -23,6 +23,7 @@ export type FormattingAPI =
     } & {
         fg: ColourCodeStringLiteral;
         bg: ColourCodeStringLiteral;
+        merge(overrideFormatting: FormattingSettings | FormattingInfo): FormattingAPI;
     };
 
 export class FormattingSettings
@@ -98,14 +99,23 @@ export class FormattingSettings
         return true;
     }
 
-    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
-        return this.apply({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) });
+        return this.apply({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
-    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
-        return this.apply({ background: this.getColorStringFromStringLiteral(strings, substitutions) });
+        return this.apply({ background: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
+    }
+
+    merge(overrideFormatting: FormattingSettings | FormattingInfo): FormattingSettings
+    {
+        const overrides = overrideFormatting instanceof FormattingSettings
+            ? overrideFormatting
+            : new FormattingSettings(overrideFormatting);
+
+        return FormattingSettings.fromMerged(this, overrides);
     }
 
     format(value: string)
