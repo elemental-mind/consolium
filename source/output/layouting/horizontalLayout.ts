@@ -1,50 +1,10 @@
+import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
 import { FlexBoundary, type FlexAPI, type GrowthContext, type ShrinkContext } from "./flex.ts";
 
 export type LineDefinition = LineElement[] | FormattingFrame;
 export type LineElement = string | FormattingFrame | FlexAPI;
 export type FormattingFrame = [style: FormattingAPI, ...LineElement[]];
-
-abstract class FlexAdjustment
-{
-    readonly range: FlexRange;
-
-    constructor(range: FlexRange)
-    {
-        this.range = range;
-    }
-
-    abstract get priority(): number;
-    abstract get flexFactor(): number;
-    abstract get capacity(): number;
-    abstract apply(target: string[], amount: number): number;
-}
-
-interface FlexAdjustmentConstructor
-{
-    new(range: FlexRange): FlexAdjustment;
-    sortByPriority(ranges: FlexRange[]): FlexRange[];
-}
-
-class ShrinkAdjustment extends FlexAdjustment
-{
-    static sortByPriority(ranges: FlexRange[]) { return ranges.toSorted((left, right) => left.contentImportance - right.contentImportance); }
-
-    get priority() { return this.range.contentImportance; }
-    get flexFactor() { return this.range.truncator!.flexFactor; }
-    get capacity() { return this.range.truncationCapacity; }
-    apply(target: string[], amount: number) { return this.range.truncate(target, amount); }
-}
-
-class GrowAdjustment extends FlexAdjustment
-{
-    static sortByPriority(ranges: FlexRange[]) { return ranges.toSorted((left, right) => (right.filler?.fillPriority ?? 0) - (left.filler?.fillPriority ?? 0)); }
-
-    get priority() { return this.range.filler!.fillPriority; }
-    get flexFactor() { return this.range.filler!.flexFactor; }
-    get capacity() { return this.range.filler!.max; }
-    apply(target: string[], amount: number) { return this.range.grow(target, amount); }
-}
 
 export class HorizontalLayout
 {
@@ -71,157 +31,19 @@ export class HorizontalLayout
         let adjustedStrings = this.normalizedStrings;
         const widthDifference = targetWidth - this.unformattedWidth;
 
-        if (widthDifference)
-            adjustedStrings = this.adjustBy(widthDifference);
+        if (widthDifference < 0)
+            adjustedStrings = this.adjustWith(Truncation, -widthDifference);
+        else if (widthDifference > 0)
+            adjustedStrings = this.adjustWith(Extension, widthDifference);
 
         return this.formatStrings(adjustedStrings);
-    }
-
-    private adjustBy(difference: number): string[]
-    {
-        const adjustmentTarget = [...this.normalizedStrings];
-
-        const Adjustment = difference < 0 ? ShrinkAdjustment : GrowAdjustment;
-        let remainingAdjustment = Math.abs(difference);
-
-        for (const adjustmentGroup of this.prioritySortedAndGroupedAdjustments(Adjustment))
-        {
-            if (adjustmentGroup.length === 1)
-                remainingAdjustment -= adjustmentGroup[0].apply(adjustmentTarget, remainingAdjustment);
-            else
-                remainingAdjustment -= this.adjustGroup(adjustmentGroup, adjustmentTarget, remainingAdjustment);
-
-            if (remainingAdjustment === 0) break;
-        }
-
-        return adjustmentTarget;
-    }
-
-    /** Groups the participating flex adjustments by priority, in the order in which they consume space. */
-    private prioritySortedAndGroupedAdjustments(Adjustment: FlexAdjustmentConstructor): FlexAdjustment[][]
-    {
-        const adjustmentsGroupedByPriority = new Map<number, FlexAdjustment[]>();
-
-        for (const range of Adjustment.sortByPriority(this.flexRanges))
-        {
-            const adjustment = new Adjustment(range);
-            const priority = adjustment.priority;
-
-            const group = adjustmentsGroupedByPriority.get(priority);
-            if (group) group.push(adjustment); else adjustmentsGroupedByPriority.set(priority, [adjustment]);
-        }
-
-        return [...adjustmentsGroupedByPriority.values()];
-    }
-
-    private adjustGroup(adjustments: FlexAdjustment[], target: string[], amount: number): number
-    {
-        const distribution = this.distributeCapped(amount, adjustments);
-
-        let appliedAmount = 0;
-        for (const [index, adjustment] of adjustments.entries())
-            appliedAmount += adjustment.apply(target, distribution[index]);
-
-        return appliedAmount;
-    }
-
-    /**
-     * Distributes an amount as integers proportional to the adjustments' flex factors.
-     * Shares are capped at each adjustment's capacity (undefined = uncapped) and the
-     * excess of capped shares is redistributed among the ranges that can still flex.
-     */
-    private distributeCapped(amount: number, adjustments: FlexAdjustment[]): number[]
-    {
-        const distribution: number[] = [];
-        const distributionFactors: number[] = [];
-        const indicesOfRangesWithCapacity = new Set<number>();
-
-        for (const [index, adjustment] of adjustments.entries())
-        {
-            distribution.push(0);
-
-            if (adjustment.capacity)
-            {
-                distributionFactors.push(adjustment.flexFactor);
-                indicesOfRangesWithCapacity.add(index);
-            }
-            else
-                distributionFactors.push(0);
-        }
-
-        // Allocate by flex factor. Whenever a range reaches its capacity, its
-        // excess share is redistributed in the next round.
-        while (amount && indicesOfRangesWithCapacity.size)
-        {
-            const shares = this.distributeInteger(amount, distributionFactors);
-
-            amount = 0;
-
-            for (const index of indicesOfRangesWithCapacity)
-            {
-                const capacity = adjustments[index].capacity;
-                const assignment = distribution[index] + shares[index];
-
-                if (assignment >= capacity)
-                {
-                    distribution[index] = capacity;
-                    amount += assignment - capacity;
-                    indicesOfRangesWithCapacity.delete(index);
-                    distributionFactors[index] = 0;
-                }
-                else
-                    distribution[index] = assignment;
-            }
-        }
-
-        return distribution;
-    }
-
-    private distributeInteger(amount: number, factors: number[]): number[]
-    {
-        let total = 0;
-        for (const factor of factors) total += factor;
-
-        const distribution: number[] = [];
-        const roundingErrors: number[] = [];
-        const indices: number[] = [];
-
-        let remainingToDistribute = amount;
-        for (let index = 0; index < factors.length; index++)
-        {
-            const idealAttribution = factors[index] * amount / total;
-            const actualAttribution = Math.floor(idealAttribution);
-
-            distribution.push(actualAttribution);
-            roundingErrors.push(idealAttribution - actualAttribution);
-            indices.push(index);
-
-            remainingToDistribute -= actualAttribution;
-        }
-
-        // We sort by remainder size - but only keep track of indices
-        indices.sort((leftIndex, rightIndex) => roundingErrors[rightIndex] - roundingErrors[leftIndex]);
-
-        // We might have an integer amount left to be distributed.
-        // The candidates with the biggest errors each get one added until the remainder is exhausted.
-        for (let index = 0; index < remainingToDistribute; index++)
-            distribution[indices[index]]++;
-
-        return distribution;
-    }
-
-    private formatStrings(adjustedStrings: string[]): string
-    {
-        return this.formattingRanges
-            .map(range => range.getFormattedString(adjustedStrings))
-            .join("");
     }
 
     private parseFormattingFrame(frame: LineDefinition, parentFormatting: FormattingSettings)
     {
         if (frame[0] instanceof FormattingSettings)
         {
-            const formatting = FormattingSettings.fromMerged(parentFormatting, frame[0] as any as FormattingSettings);
+            const formatting = FormattingSettings.fromMerged(parentFormatting, frame[0]);
             this.formattingRanges.at(-1)!.appendRange(formatting);
             this.parseFormattingFrameBody(frame, formatting, 1);
         }
@@ -285,6 +107,68 @@ export class HorizontalLayout
     {
         this.normalizedStrings.push(value);
         this.cumulativeStringLengths.push(this.unformattedWidth + value.length);
+    }
+
+    private adjustWith(AdjustmentType: typeof Extension | typeof Truncation, difference: number): string[]
+    {
+        const modifiedStrings = [...this.normalizedStrings];
+        const adjustmentGroups = this.discoverPossibleAdjustmentsAndGroupByPriority(AdjustmentType);
+        const sortedPriorities = [...adjustmentGroups.keys()].sort((a, b) => a - b);
+
+        for (const adjustmentPriority of sortedPriorities)
+        {
+            const adjustmentGroup = adjustmentGroups.get(adjustmentPriority)!;
+            if (adjustmentGroup.length === 1)
+                difference -= adjustmentGroup[0].apply(modifiedStrings, difference);
+            else
+                difference -= this.adjustGroup(adjustmentGroup, modifiedStrings, difference);
+
+            if (difference === 0) break;
+        }
+
+        return modifiedStrings;
+    }
+
+    private discoverPossibleAdjustmentsAndGroupByPriority(AdjustmentType: typeof Extension | typeof Truncation)
+    {
+        const adjustmentGroups = new Map<number, (Extension | Truncation)[]>();
+
+        for (const range of this.flexRanges)
+        {
+            const adjustment = AdjustmentType.fromRangeIfCompatible(range);
+
+            if (!adjustment) continue;
+
+            const adjustmentGroup = adjustmentGroups.get(adjustment.priority);
+            if (adjustmentGroup)
+                adjustmentGroup.push(adjustment);
+            else
+                adjustmentGroups.set(adjustment.priority, [adjustment]);
+        }
+
+        return adjustmentGroups;
+    }
+
+    private adjustGroup(adjustments: Adjustment[], target: string[], amount: number): number
+    {
+        const { distribution } = distributeIntegerCapped(
+            amount,
+            adjustments.map(adjustment => adjustment.flexFactor),
+            adjustments.map(adjustment => adjustment.capacity),
+        );
+
+        let adjustedAmount = 0;
+        for (const [index, adjustment] of adjustments.entries())
+            adjustedAmount += adjustment.apply(target, distribution[index]);
+
+        return adjustedAmount;
+    }
+
+    private formatStrings(adjustedStrings: string[]): string
+    {
+        return this.formattingRanges
+            .map(range => range.getFormattedString(adjustedStrings))
+            .join("");
     }
 }
 
@@ -402,5 +286,59 @@ export class FlexRange extends Range<FlexRange>
         this.truncator!.shrink(truncationTarget, this.startIndex, this.endIndex, possibleTruncation);
 
         return possibleTruncation;
+    }
+}
+
+abstract class Adjustment
+{
+    readonly range: FlexRange;
+    readonly priority: number;
+    readonly flexFactor: number;
+    readonly capacity: number;
+
+    constructor(range: FlexRange, priority: number, flexFactor: number, capacity: number)
+    {
+        this.range = range;
+        this.priority = priority;
+        this.flexFactor = flexFactor;
+        this.capacity = capacity;
+    }
+
+    abstract apply(target: string[], amount: number): number;
+}
+
+class Truncation extends Adjustment
+{
+    static fromRangeIfCompatible(range: FlexRange)
+    {
+        return range.truncationCapacity > 0 ? new Truncation(range) : undefined;
+    }
+
+    constructor(range: FlexRange)
+    {
+        super(range, range.contentImportance, range.truncator!.flexFactor, range.truncationCapacity);
+    }
+
+    apply(target: string[], amount: number)
+    {
+        return this.range.truncate(target, amount);
+    }
+}
+
+class Extension extends Adjustment
+{
+    static fromRangeIfCompatible(range: FlexRange)
+    {
+        if (range.filler) return new Extension(range);
+    }
+
+    constructor(range: FlexRange)
+    {
+        super(range, -range.filler!.fillPriority, range.filler!.flexFactor, range.filler!.max);
+    }
+
+    apply(target: string[], amount: number)
+    {
+        return this.range.grow(target, amount);
     }
 }
