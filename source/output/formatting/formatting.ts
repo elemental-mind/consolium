@@ -1,6 +1,26 @@
 import { Colors, mapColorToEscapeCodeSequence, type Color, type ColorValue, type HexColor } from "./color.ts";
 import { TextStyles, type TextStyle } from "./textStyle.ts";
 
+export type FormattingAPI = ForegroundColoursAPI & BackgroundColoursAPI & CustomColoursAPI & StylesAPI;
+export type FormattingWithInternalAPI = {
+    [K in keyof FormattingAPI]: FormattingAPI[K] extends FormattingAPI ? FormattingWithInternalAPI
+    : FormattingAPI[K] extends ((...args: infer Arguments) => infer Result extends FormattingAPI) ? ((...args: Arguments) => FormattingWithInternalAPI)
+    : FormattingAPI[K]
+} & FormattingSettings;
+
+type ForegroundColoursAPI = {
+    [color in Color]: FormattingAPI;
+};
+type BackgroundColoursAPI = {
+    [bgColor in `bg${Capitalize<Color>}`]: FormattingAPI;
+};
+type CustomColoursAPI = {
+    fg: ColourCodeStringLiteral;
+    bg: ColourCodeStringLiteral;
+};
+type StylesAPI = {
+    [style in TextStyle]: FormattingAPI;
+};
 type ColourCodeStringLiteral = (strings: TemplateStringsArray, ...substitutions: (string | number)[]) => FormattingAPI;
 
 export interface FormattingInfo
@@ -17,29 +37,19 @@ export interface FormattingInfo
     strikethrough?: boolean;
 }
 
-export type FormattingAPI =
-    {
-        [possibleSetting in (Color | `bg${Capitalize<Color>}` | TextStyle)]: FormattingAPI;
-    } & {
-        fg: ColourCodeStringLiteral;
-        bg: ColourCodeStringLiteral;
-        merge(overrideFormatting: FormattingSettings | FormattingInfo): FormattingAPI;
-    };
 
-export class FormattingSettings
+// This class and its prototype is derived at parse time from all the colours etc. that are defined in color.ts and textStyle.ts
+const FluentFormattingAPIBase = class FluentBase
 {
-    //---------------
-    // Setup part for adding fluent API members
-    //---------------
     private static defineFormattingProperty(name: string, settings: FormattingInfo)
     {
-        Object.defineProperty(FormattingSettings, name, {
+        Object.defineProperty(this, name, {
             configurable: false, enumerable: false,
             get() { return new FormattingSettings(settings); }
         });
-        Object.defineProperty(FormattingSettings.prototype, name, {
+        Object.defineProperty(this.prototype, name, {
             configurable: false, enumerable: false,
-            get(this: FormattingSettings) { return this.apply(settings); }
+            get(this: FormattingSettings) { return this.addSettings(settings); }
         });
     };
 
@@ -60,19 +70,11 @@ export class FormattingSettings
     static {
         this.addFluentAPIMembers();
     }
+} as any as new () => (ForegroundColoursAPI & BackgroundColoursAPI & StylesAPI);
 
-    //---------------------------
-    // Normal class members
-    //---------------------------
-
+export class FormattingSettings extends FluentFormattingAPIBase
+{
     static None = new FormattingSettings();
-
-    static fromMerged(baseFormatting: FormattingSettings, overrideFormatting: FormattingSettings)
-    {
-        const mergedFormatting = new FormattingSettings({ ...baseFormatting.settings, ...overrideFormatting.settings });
-        mergedFormatting.shouldCloneOnChange = false;
-        return mergedFormatting;
-    }
 
     static fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
@@ -85,12 +87,6 @@ export class FormattingSettings
     }
 
     settings: FormattingInfo = {};
-    private shouldCloneOnChange = true;
-
-    constructor(settings: FormattingInfo = {})
-    {
-        this.settings = settings;
-    }
 
     get isNullFormatting()
     {
@@ -99,23 +95,31 @@ export class FormattingSettings
         return true;
     }
 
-    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
+    private shouldCloneOnChange = true;
+
+    constructor(settings: FormattingInfo = {})
     {
-        return this.apply({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
+        super();
+        this.settings = settings;
     }
 
-    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
+    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
-        return this.apply({ background: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
+        return this.addSettings({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
-    merge(overrideFormatting: FormattingSettings | FormattingInfo): FormattingSettings
+    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
     {
-        const overrides = overrideFormatting instanceof FormattingSettings
-            ? overrideFormatting
-            : new FormattingSettings(overrideFormatting);
+        return this.addSettings({ background: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
+    }
 
-        return FormattingSettings.fromMerged(this, overrides);
+    createdDerivedFormattingFromMerged(overrideFormatting: FormattingSettings | FormattingInfo)
+    {
+        const overrides = overrideFormatting instanceof FormattingSettings ? overrideFormatting.settings : overrideFormatting;
+
+        const mergedFormatting = new FormattingSettings({ ...this.settings, ...overrides });
+        mergedFormatting.shouldCloneOnChange = false;
+        return mergedFormatting;
     }
 
     format(value: string)
@@ -135,7 +139,7 @@ export class FormattingSettings
         return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
     }
 
-    private apply(settings: FormattingInfo)
+    addSettings(settings: FormattingInfo)
     {
         if (this.shouldCloneOnChange)
         {
@@ -165,3 +169,4 @@ export class FormattingSettings
 };
 
 export const Formatting = FormattingSettings as any as FormattingAPI;
+

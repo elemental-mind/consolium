@@ -43,7 +43,7 @@ export class HorizontalLayout
     {
         if (frame[0] instanceof FormattingSettings)
         {
-            const formatting = FormattingSettings.fromMerged(parentFormatting, frame[0]);
+            const formatting = parentFormatting.createdDerivedFormattingFromMerged(frame[0]);
             this.formattingRanges.at(-1)!.appendRange(formatting);
             this.parseFormattingFrameBody(frame, formatting, 1);
         }

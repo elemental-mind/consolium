@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import { Formatting as FormattingWithPublicAPI, FormattingSettings, type FormattingAPI } from "./formatting.ts";
-
-type FormattingWithInternalAPI = {
-    [K in keyof FormattingAPI]: FormattingAPI[K] extends FormattingAPI ? FormattingWithInternalAPI
-    : FormattingAPI[K] extends ((...args: infer Arguments) => infer Result extends FormattingAPI) ? ((...args: Arguments) => FormattingWithInternalAPI)
-    : FormattingAPI[K]
-} & FormattingSettings;
+import { Formatting as FormattingWithPublicAPI, FormattingSettings, type FormattingAPI, type FormattingWithInternalAPI } from "./formatting.ts";
 
 const Formatting = FormattingWithPublicAPI as unknown as FormattingWithInternalAPI;
 
@@ -105,7 +99,7 @@ export class FormattingChainingTests
         const parent = Formatting.blue.bgBlack.bold;
         const child = Formatting.red.underlined;
 
-        const embedded = parent.merge(child).italic;
+        const embedded = parent.createdDerivedFormattingFromMerged(child).italic as any as FormattingSettings;
 
         assert.deepEqual(embedded.settings, {
             foreground: "red",
@@ -130,7 +124,7 @@ export class FormattingChainingTests
     {
         const parent = Formatting.green.bold.italic;
 
-        const embedded = parent.merge({ bold: false, background: "white" });
+        const embedded = parent.createdDerivedFormattingFromMerged({ bold: false, background: "white" });
 
         assert.deepEqual(embedded.settings, {
             foreground: "green",
@@ -162,7 +156,7 @@ export class FormattingChainingTests
     omitsDisabledStylesWhenFormattingStrings()
     {
         const formatted = Formatting.green.bold.italic
-            .merge({ bold: false })
+            .createdDerivedFormattingFromMerged({ bold: false })
             .format("ready");
 
         assert.equal(formatted, "\u001B[32;3mready\u001B[0m");

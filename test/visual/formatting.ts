@@ -1,4 +1,6 @@
-import { Formatting } from "../../source/output/formatting/formatting.ts";
+import { Formatting as PublicFormatting, type FormattingWithInternalAPI } from "../../source/output/formatting/formatting.ts";
+
+const Formatting = PublicFormatting as FormattingWithInternalAPI;
 
 console.log(Formatting.bold.underlined.format("Terminalium formatting preview"));
 console.log();
