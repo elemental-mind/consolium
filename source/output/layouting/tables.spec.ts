@@ -14,13 +14,13 @@ export class TableRenderingTests
         const columns = {
             path: {
                 header: "File",
-                cellOptions: { padding: " ", width: { min: 8 } },
+                cellOptions: { padding: { left: " ", right: " " }, width: { min: 8 } },
             },
             size: {
                 header: "Size",
                 cellOptions: {
-                    value: (file: FileRow) => `${file.size} B`,
-                    align: "right" as const,
+                    cell: (file: FileRow) => `${file.size} B`,
+                    align: { horizontal: "right" as const },
                     padding: " ",
                 },
             },
@@ -29,7 +29,7 @@ export class TableRenderingTests
             { path: "readme.md", size: 42 },
         ]);
 
-        assert.equal(table.render({ formatting: false }), [
+        assert.equal(table.render(), [
             "╭───────────┬──────╮",
             "│ File      │ Size │",
             "├───────────┼──────┤",
@@ -42,28 +42,51 @@ export class TableRenderingTests
     {
         const table = new Table<FileRow>({
             path: { header: "File" },
-            size: { header: "Bytes", cellOptions: { align: "right" } },
-        }, { border: false });
+            size: { header: "Bytes", cellOptions: { align: { horizontal: "right" } } },
+        }, { border: TableBorder.none });
 
         table.data.push({ path: "a.txt", size: 2 });
         table.footerData = { path: "Total", size: 2 };
 
-        assert.deepEqual(table.renderLines({ formatting: false }), [
+        assert.equal(table.render(), [
             "File Bytes",
             "a.txt    2",
             "Total    2",
+        ].join("\n"));
+    }
+
+    rendersWithoutStructuralLinesWhenTheBorderIsNone()
+    {
+        const table = new Table<FileRow>({
+            path: { cellOptions: { padding: { right: " " } } },
+            size: {},
+        }, { border: TableBorder.none }, [
+            { path: "readme.md", size: 42 },
         ]);
+
+        assert.equal(table.render(), "readme.md 42");
     }
 
     supportsPositionalRowsAndAutomaticColumns()
     {
         type PackageRow = readonly [string, string];
-        const table = Table.auto<PackageRow>([
+        const packages: PackageRow[] = [
             ["terminalium", "0.1.0"],
             ["unitium", "0.8.6"],
-        ], { border: false });
+        ];
+        const table = new Table<PackageRow>({
+            "0": { cellOptions: { padding: { right: " " } } },
+            "1": {},
+        }, { border: TableBorder.none }, packages);
 
-        assert.equal(table.render({ formatting: false }), [
+        assert.equal(table.render(), [
+            "terminalium 0.1.0",
+            "unitium     0.8.6",
+        ].join("\n"));
+
+        const automaticTable = Table.Auto(packages, { border: false });
+
+        assert.equal(automaticTable.render(), [
             "terminalium0.1.0",
             "unitium    0.8.6",
         ].join("\n"));

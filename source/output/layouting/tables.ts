@@ -1,19 +1,21 @@
+import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
 import { Flex } from "./flex.ts";
-import {
+import
+{
     HorizontalLayout,
     type FormattingFrame,
     type LineDefinition,
     type LineElement,
 } from "./horizontalLayout.ts";
 
-export type TerminalLine = string | LineDefinition;
+export type ContentLayout = LineDefinition;
+export type CellContent = ContentLayout | string | number | bigint | boolean | object | null | undefined;
 
 export interface TableRenderControl
 {
     width?: number;
     horizontalOffset?: number;
-    formatting?: boolean;
 }
 
 export interface TableColumnWidth
@@ -29,36 +31,49 @@ export interface TableCellOverflow
     truncate?: string;
 }
 
+export interface TableCellAlignment
+{
+    horizontal?: "left" | "center" | "right";
+    vertical?: "top" | "middle" | "bottom";
+}
+
+export interface TableCellPadding
+{
+    left?: string;
+    right?: string;
+}
+
 export interface TableCellOptions<Data>
 {
-    value?: (data: Data, rowIndex: number, columnIndex: number) => unknown;
-    cell?: (data: Data, rowIndex: number, columnIndex: number) => TerminalLine;
+    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
     width?: number | TableColumnWidth;
-    align?: "left" | "center" | "right";
-    padding?: string;
-    padLeft?: string;
-    padRight?: string;
+    align?: TableCellAlignment;
+    padding?: string | TableCellPadding;
     overflow?: TableCellOverflow;
 }
 
 export interface TableSectionCellOptions<Data>
 {
-    value?: (data: Data, rowIndex: number, columnIndex: number) => unknown;
-    cell?: (data: Data, rowIndex: number, columnIndex: number) => TerminalLine;
+    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
     overflow?: TableCellOverflow;
 }
 
-export interface TableColumn<Row>
+export interface TableColumnDefinition<EntryType>
 {
     header?: string;
     headerOptions?: TableSectionCellOptions<string>;
-    cellOptions?: TableCellOptions<Row>;
-    footerOptions?: TableSectionCellOptions<Partial<Row>>;
+    cellOptions?: TableCellOptions<EntryType>;
+    footerOptions?: TableSectionCellOptions<Partial<EntryType>>;
 }
 
-export type TableColumns<Row> = Row extends readonly unknown[]
-    ? readonly TableColumn<Row>[]
-    : { readonly [Key in keyof Row]?: TableColumn<Row> };
+type PositionalColumnKey<EntryType extends readonly unknown[]> = Exclude<keyof EntryType, keyof readonly unknown[]> & string;
+type TableColumnKey<EntryType> = EntryType extends readonly unknown[]
+    ? PositionalColumnKey<EntryType>
+    : Extract<keyof EntryType, string>;
+
+export type TableColumns<EntryType> = {
+    readonly [Key in TableColumnKey<EntryType>]?: TableColumnDefinition<EntryType>
+};
 
 export interface TableFormatting
 {
@@ -66,29 +81,24 @@ export interface TableFormatting
     borderStyle?: FormattingAPI;
 }
 
-export interface RenderedTableSections
-{
-    head: string[];
-    body: string[];
-    footer: string[];
-}
-
 export class TableBorder
 {
+    static readonly none = new TableBorder("", "", "", "", "", "", "", "", "", "", "");
     static readonly light = new TableBorder("┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "─", "│");
     static readonly rounded = new TableBorder("╭", "┬", "╮", "├", "┼", "┤", "╰", "┴", "╯", "─", "│");
 
-    readonly topLeft: string;
-    readonly topJoin: string;
-    readonly topRight: string;
-    readonly middleLeft: string;
-    readonly middleJoin: string;
-    readonly middleRight: string;
-    readonly bottomLeft: string;
-    readonly bottomJoin: string;
-    readonly bottomRight: string;
-    readonly horizontal: string;
     readonly vertical: string;
+
+    private readonly topLeft: string;
+    private readonly topJoin: string;
+    private readonly topRight: string;
+    private readonly middleLeft: string;
+    private readonly middleJoin: string;
+    private readonly middleRight: string;
+    private readonly bottomLeft: string;
+    private readonly bottomJoin: string;
+    private readonly bottomRight: string;
+    private readonly horizontal: string;
 
     private constructor(
         topLeft: string,
@@ -116,20 +126,145 @@ export class TableBorder
         this.horizontal = horizontal;
         this.vertical = vertical;
     }
+
+    renderTop(columnWidths: number[])
+    {
+        if (!this.isVisible) return undefined;
+        return this.renderHorizontalLine(this.topLeft, this.topJoin, this.topRight, columnWidths);
+    }
+
+    renderSeparator(columnWidths: number[])
+    {
+        if (!this.isVisible) return undefined;
+        return this.renderHorizontalLine(this.middleLeft, this.middleJoin, this.middleRight, columnWidths);
+    }
+
+    renderBottom(columnWidths: number[])
+    {
+        if (!this.isVisible) return undefined;
+        return this.renderHorizontalLine(this.bottomLeft, this.bottomJoin, this.bottomRight, columnWidths);
+    }
+
+    renderRow(cells: string[], renderedVerticalBorder = this.vertical)
+    {
+        if (!this.isVisible) return cells.join("");
+        return renderedVerticalBorder + cells.join(renderedVerticalBorder) + renderedVerticalBorder;
+    }
+
+    getWidth(columnCount: number)
+    {
+        return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
+    }
+
+    private get isVisible()
+    {
+        return this.horizontal.length > 0 || this.vertical.length > 0;
+    }
+
+    private renderHorizontalLine(left: string, join: string, right: string, columnWidths: number[])
+    {
+        const fragments = [left, ...columnWidths.flatMap(width => [this.horizontal.repeat(width), join])];
+        fragments[fragments.length - 1] = right;
+        return fragments.join("");
+    }
 }
 
-type ColumnIdentifier = string | number | symbol;
-type TableSection = "header" | "body" | "footer";
-
-class TableColumnModel<Row>
+class TableCellTemplate<Data>
 {
-    readonly identifier: ColumnIdentifier;
-    readonly definition: TableColumn<Row>;
+    private readonly selectContent?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
+    private readonly selectDefaultContent: (data: Data) => unknown;
+    private readonly alignment: TableCellAlignment;
+    private readonly padding: Required<TableCellPadding>;
+    private readonly overflow: TableCellOverflow;
 
-    constructor(identifier: ColumnIdentifier, definition: TableColumn<Row>)
+    constructor(
+        contentOptions: TableSectionCellOptions<Data> | TableCellOptions<Data> | undefined,
+        sharedOptions: TableCellOptions<unknown> | undefined,
+        selectDefaultContent: (data: Data) => unknown,
+    )
+    {
+        this.selectContent = contentOptions?.cell;
+        this.selectDefaultContent = selectDefaultContent;
+        this.alignment = sharedOptions?.align ?? {};
+        this.padding = this.parsePadding(sharedOptions?.padding);
+        this.overflow = contentOptions?.overflow ?? sharedOptions?.overflow ?? {};
+    }
+
+    measure(data: Data, rowIndex: number, columnIndex: number)
+    {
+        const content = this.resolveContent(data, rowIndex, columnIndex);
+        const paddingWidth = content.ownsLayout ? 0 : this.padding.left.length + this.padding.right.length;
+        return new HorizontalLayout(content.layout).unformattedWidth + paddingWidth;
+    }
+
+    render(data: Data, rowIndex: number, columnIndex: number, width: number)
+    {
+        const content = this.resolveContent(data, rowIndex, columnIndex);
+        if (content.ownsLayout)
+            return new HorizontalLayout(content.layout).computeString(width);
+
+        const contentWidth = Math.max(0, width - this.padding.left.length - this.padding.right.length);
+        const alignedLayout = this.createAlignedLayout(content.layout, this.overflow.truncate ?? "");
+        const renderedContent = new HorizontalLayout(alignedLayout).computeString(contentWidth);
+        return this.padding.left + renderedContent + this.padding.right;
+    }
+
+    private resolveContent(data: Data, rowIndex: number, columnIndex: number)
+    {
+        const content = this.selectContent
+            ? this.selectContent(data, rowIndex, columnIndex)
+            : this.selectDefaultContent(data);
+
+        return Array.isArray(content)
+            ? { layout: content as ContentLayout, ownsLayout: true }
+            : { layout: [String(content ?? "")] as ContentLayout, ownsLayout: false };
+    }
+
+    private createAlignedLayout(layout: ContentLayout, truncator: string): ContentLayout
+    {
+        const contentElements = layout[0] instanceof FormattingSettings
+            ? [layout as FormattingFrame]
+            : layout as LineElement[];
+
+        if (this.alignment.horizontal === "right")
+            return [Flex.grow(" ").shrinkRight(truncator), ...contentElements];
+
+        if (this.alignment.horizontal === "center")
+            return [Flex.grow(" ").shrinkRight(truncator), ...contentElements, Flex.grow(" ")];
+
+        return [...contentElements, Flex.shrinkLeft(truncator).grow(" ")];
+    }
+
+    private parsePadding(padding: string | TableCellPadding | undefined): Required<TableCellPadding>
+    {
+        if (typeof padding === "string")
+            return { left: padding, right: padding };
+
+        return {
+            left: padding?.left ?? "",
+            right: padding?.right ?? "",
+        };
+    }
+}
+
+class TableColumn<EntryType>
+{
+    readonly identifier: string;
+    readonly definition: TableColumnDefinition<EntryType>;
+
+    private readonly headerTemplate: TableCellTemplate<string>;
+    private readonly bodyTemplate: TableCellTemplate<EntryType>;
+    private readonly footerTemplate: TableCellTemplate<Partial<EntryType>>;
+
+    constructor(identifier: string, definition: TableColumnDefinition<EntryType>)
     {
         this.identifier = identifier;
         this.definition = definition;
+
+        const sharedOptions = definition.cellOptions as TableCellOptions<unknown> | undefined;
+        this.headerTemplate = new TableCellTemplate(definition.headerOptions, sharedOptions, title => title);
+        this.bodyTemplate = new TableCellTemplate(definition.cellOptions, sharedOptions, entry => this.readValue(entry));
+        this.footerTemplate = new TableCellTemplate(definition.footerOptions, sharedOptions, footer => this.readValue(footer));
     }
 
     get widthConfiguration()
@@ -166,115 +301,179 @@ class TableColumnModel<Row>
         return typeof width === "object" ? width.contentImportance ?? 0 : Infinity;
     }
 
-    get horizontalPadding()
+    measurePreferredWidth(data: EntryType[], footerData: Partial<EntryType> | undefined, columnIndex: number)
     {
-        const options = this.definition.cellOptions;
-        return {
-            left: options?.padLeft ?? options?.padding ?? "",
-            right: options?.padRight ?? options?.padding ?? "",
-        };
+        if (typeof this.widthConfiguration === "number")
+            return this.widthConfiguration;
+
+        const measuredWidths = data.map((entry, rowIndex) =>
+            this.bodyTemplate.measure(entry, rowIndex, columnIndex));
+
+        if (this.definition.header !== undefined)
+            measuredWidths.push(this.headerTemplate.measure(this.definition.header, 0, columnIndex));
+        if (footerData !== undefined)
+            measuredWidths.push(this.footerTemplate.measure(footerData, 0, columnIndex));
+
+        return Math.max(this.minimumWidth, ...measuredWidths);
+    }
+
+    renderHeader(columnIndex: number, width: number)
+    {
+        return this.headerTemplate.render(this.definition.header ?? "", 0, columnIndex, width);
+    }
+
+    renderBody(entry: EntryType, rowIndex: number, columnIndex: number, width: number)
+    {
+        return this.bodyTemplate.render(entry, rowIndex, columnIndex, width);
+    }
+
+    renderFooter(footerData: Partial<EntryType>, columnIndex: number, width: number)
+    {
+        return this.footerTemplate.render(footerData, 0, columnIndex, width);
+    }
+
+    private readValue(data: EntryType | Partial<EntryType>)
+    {
+        return (data as Record<string, unknown>)[this.identifier];
     }
 }
 
-export class Table<Row>
-{
-    readonly data: Row[];
-    footerData?: Partial<Row>;
+type FlexibleColumn<EntryType> = {
+    column: TableColumn<EntryType>;
+    index: number;
+};
 
-    private readonly columns: TableColumnModel<Row>[];
+export class Table<EntryType>
+{
+    static Auto<EntryType extends object>(data: readonly EntryType[], formatting: TableFormatting = {}): Table<EntryType>
+    {
+        const firstEntry = data[0];
+        let columnIdentifiers: string[];
+
+        if (Array.isArray(firstEntry))
+            columnIdentifiers = firstEntry.map((_, index) => String(index));
+        else
+        {
+            const encounteredIdentifiers = data.flatMap(entry => Object.keys(entry));
+            columnIdentifiers = [...new Set(encounteredIdentifiers)];
+        }
+
+        const columnDefinitions = Object.fromEntries(
+            columnIdentifiers.map(identifier => [identifier, {}]),
+        );
+
+        return new Table<EntryType>(columnDefinitions as TableColumns<EntryType>, formatting, data);
+    }
+
+    readonly data: EntryType[];
+    footerData?: Partial<EntryType>;
+
+    private readonly columns: TableColumn<EntryType>[];
     private readonly formatting: TableFormatting;
 
-    constructor(columns: TableColumns<Row>, formatting: TableFormatting = {}, data: readonly Row[] = [])
+    constructor(columns: TableColumns<EntryType>, formatting: TableFormatting = {}, data: readonly EntryType[] = [])
     {
-        this.columns = this.normalizeColumns(columns);
+        this.columns = this.parseColumnDefinitions(columns);
         this.formatting = formatting;
         this.data = [...data];
-    }
-
-    static auto<Row extends object>(
-        data: readonly Row[],
-        formatting: TableFormatting = {},
-    ): Table<Row>
-    {
-        const firstRow = data[0];
-        const columns = Array.isArray(firstRow)
-            ? firstRow.map(() => ({}))
-            : Object.fromEntries(data.flatMap(row => Reflect.ownKeys(row)).map(key => [key, {}]));
-
-        return new Table<Row>(columns as TableColumns<Row>, formatting, data);
-    }
-
-    render(control: TableRenderControl = {})
-    {
-        return this.renderLines(control).join("\n");
-    }
-
-    renderLines(control: TableRenderControl = {})
-    {
-        const { head, body, footer } = this.renderSections(control);
-        return [...head, ...body, ...footer];
-    }
-
-    renderSections(control: TableRenderControl = {}): RenderedTableSections
-    {
-        const formatting = control.formatting ?? true;
-        const widths = this.resolveColumnWidths(control.width ?? -1);
-        const head: string[] = [];
-        const body = this.data.map((row, index) => this.renderRow("body", row, index, widths, formatting));
-        const footer: string[] = [];
-        const hasHeaders = this.columns.some(column => column.definition.header !== undefined);
-        const border = this.resolvedBorder;
-
-        if (border)
-            head.push(this.renderBorderLine("top", widths, formatting));
-
-        if (hasHeaders)
-        {
-            head.push(this.renderRow("header", undefined, 0, widths, formatting));
-            if (border && (body.length > 0 || this.footerData !== undefined))
-                head.push(this.renderBorderLine("middle", widths, formatting));
-        }
-
-        if (this.footerData !== undefined)
-        {
-            if (border && body.length > 0)
-                footer.push(this.renderBorderLine("middle", widths, formatting));
-            footer.push(this.renderRow("footer", this.footerData, 0, widths, formatting));
-        }
-
-        if (border)
-            footer.push(this.renderBorderLine("bottom", widths, formatting));
-
-        const visibleWidth = control.width ?? -1;
-        const offset = control.horizontalOffset ?? 0;
-        return {
-            head: head.map(line => this.clipLine(line, visibleWidth, offset)),
-            body: body.map(line => this.clipLine(line, visibleWidth, offset)),
-            footer: footer.map(line => this.clipLine(line, visibleWidth, offset)),
-        };
     }
 
     private get resolvedBorder()
     {
         return this.formatting.border === false
-            ? undefined
+            ? TableBorder.none
             : this.formatting.border ?? TableBorder.light;
     }
 
-    private normalizeColumns(columns: TableColumns<Row>)
+    render(control: TableRenderControl = {})
     {
-        if (Array.isArray(columns))
-            return columns.map((definition, index) => new TableColumnModel(index, definition));
+        const widths = this.resolveColumnWidths(control.width ?? -1);
+        const lines = [
+            ...this.renderHeader(widths),
+            ...this.renderBody(widths),
+            ...this.renderFooter(widths),
+        ];
+        const visibleWidth = control.width ?? -1;
+        const horizontalOffset = control.horizontalOffset ?? 0;
 
-        return Reflect.ownKeys(columns as object).map(key =>
-            new TableColumnModel(key, (columns as Record<PropertyKey, TableColumn<Row>>)[key]));
+        return lines
+            .map(line => this.clipLine(line, visibleWidth, horizontalOffset))
+            .join("\n");
+    }
+
+    private renderHeader(widths: number[])
+    {
+        const lines: string[] = [];
+        const border = this.resolvedBorder;
+        const hasHeaders = this.columns.some(column => column.definition.header !== undefined);
+
+        const topBorder = border.renderTop(widths);
+        if (topBorder !== undefined)
+            lines.push(this.formatBorder(topBorder));
+        if (!hasHeaders)
+            return lines;
+
+        const cells = this.columns.map((column, index) => column.renderHeader(index, widths[index]));
+        lines.push(this.renderRow(cells));
+
+        const headerSeparator = border.renderSeparator(widths);
+        if (headerSeparator !== undefined && (this.data.length > 0 || this.footerData !== undefined))
+            lines.push(this.formatBorder(headerSeparator));
+
+        return lines;
+    }
+
+    private renderBody(widths: number[])
+    {
+        return this.data.map((entry, rowIndex) =>
+        {
+            const cells = this.columns.map((column, columnIndex) =>
+                column.renderBody(entry, rowIndex, columnIndex, widths[columnIndex]));
+            return this.renderRow(cells);
+        });
+    }
+
+    private renderFooter(widths: number[])
+    {
+        const lines: string[] = [];
+        const border = this.resolvedBorder;
+
+        if (this.footerData !== undefined)
+        {
+            const footerSeparator = border.renderSeparator(widths);
+            if (footerSeparator !== undefined && this.data.length > 0)
+                lines.push(this.formatBorder(footerSeparator));
+
+            const cells = this.columns.map((column, index) =>
+                column.renderFooter(this.footerData!, index, widths[index]));
+            lines.push(this.renderRow(cells));
+        }
+
+        const bottomBorder = border.renderBottom(widths);
+        if (bottomBorder !== undefined)
+            lines.push(this.formatBorder(bottomBorder));
+
+        return lines;
+    }
+
+    private renderRow(cells: string[])
+    {
+        const border = this.resolvedBorder;
+        const verticalBorder = this.formatBorder(border.vertical);
+        return border.renderRow(cells, verticalBorder);
+    }
+
+    private parseColumnDefinitions(columns: TableColumns<EntryType>)
+    {
+        return Object.entries(columns).map(([identifier, definition]) =>
+            new TableColumn(identifier, definition as TableColumnDefinition<EntryType>));
     }
 
     private resolveColumnWidths(requestedTableWidth: number)
     {
-        const widths = this.columns.map(column =>
+        const widths = this.columns.map((column, columnIndex) =>
         {
-            const preferredWidth = this.measurePreferredWidth(column);
+            const preferredWidth = column.measurePreferredWidth(this.data, this.footerData, columnIndex);
             return Math.max(column.minimumWidth, Math.min(column.maximumWidth, preferredWidth));
         });
 
@@ -292,230 +491,73 @@ export class Table<Row>
         return widths;
     }
 
-    private measurePreferredWidth(column: TableColumnModel<Row>)
-    {
-        if (typeof column.widthConfiguration === "number")
-            return column.widthConfiguration;
-
-        const measuredWidths: number[] = [];
-        if (column.definition.header !== undefined)
-            measuredWidths.push(this.measureCell("header", column, undefined, 0));
-        for (const [rowIndex, row] of this.data.entries())
-            measuredWidths.push(this.measureCell("body", column, row, rowIndex));
-        if (this.footerData !== undefined)
-            measuredWidths.push(this.measureCell("footer", column, this.footerData, 0));
-
-        return Math.max(column.minimumWidth, ...measuredWidths);
-    }
-
-    private measureCell(section: TableSection, column: TableColumnModel<Row>, data: unknown, rowIndex: number)
-    {
-        const line = this.createCellLine(section, column, data, rowIndex);
-        const padding = this.cellPadding(section, column);
-        return new HorizontalLayout(this.normalizeLine(line)).unformattedWidth
-            + padding.left.length + padding.right.length;
-    }
-
     private growFlexibleColumns(widths: number[], amount: number)
     {
-        const candidates = this.columns
-            .map((column, index) => ({ column, index }))
-            .filter(({ column, index }) => column.isFlexible && widths[index] < column.maximumWidth);
-
-        while (amount > 0 && candidates.length > 0)
-        {
-            for (const candidate of candidates.toSorted((a, b) => b.column.flexFactor - a.column.flexFactor))
-            {
-                if (widths[candidate.index] >= candidate.column.maximumWidth)
-                    continue;
-                widths[candidate.index]++;
-                amount--;
-                if (amount === 0) return;
-            }
-
-            for (let index = candidates.length - 1; index >= 0; index--)
-                if (widths[candidates[index].index] >= candidates[index].column.maximumWidth)
-                    candidates.splice(index, 1);
-        }
+        const flexibleColumns = this.findFlexibleColumns(widths);
+        this.apportionWidthChange(widths, flexibleColumns, amount, ({ column, index }) =>
+            column.maximumWidth - widths[index]);
     }
 
     private shrinkFlexibleColumns(widths: number[], amount: number)
     {
-        const candidates = this.columns
-            .map((column, index) => ({ column, index }))
-            .filter(({ column, index }) => column.isFlexible && widths[index] > column.minimumWidth)
-            .toSorted((a, b) => a.column.contentImportance - b.column.contentImportance);
+        const columnsByImportance = Map.groupBy(
+            this.findFlexibleColumns(widths),
+            ({ column }) => column.contentImportance,
+        );
+        const sortedImportances = [...columnsByImportance.keys()].sort((a, b) => a - b);
 
-        for (const { column, index } of candidates)
+        for (const importance of sortedImportances)
         {
-            const shrinkBy = Math.min(amount, widths[index] - column.minimumWidth);
-            widths[index] -= shrinkBy;
-            amount -= shrinkBy;
+            const columns = columnsByImportance.get(importance)!;
+            const changedWidth = this.apportionWidthChange(widths, columns, amount, ({ column, index }) =>
+                widths[index] - column.minimumWidth, -1);
+            amount -= changedWidth;
             if (amount === 0) return;
         }
     }
 
-    private get borderWidth()
+    private findFlexibleColumns(widths: number[])
     {
-        if (!this.resolvedBorder || this.columns.length === 0)
-            return 0;
-        return this.columns.length + 1;
+        return this.columns
+            .map((column, index) => ({ column, index }))
+            .filter(({ column }) => column.isFlexible);
     }
 
-    private renderRow(section: TableSection, data: unknown, rowIndex: number, widths: number[], formatting: boolean)
-    {
-        const cells = this.columns.map((column, columnIndex) =>
-            this.renderCell(section, column, data, rowIndex, columnIndex, widths[columnIndex], formatting));
-        const border = this.resolvedBorder;
-
-        if (!border)
-            return cells.join("");
-
-        const verticalBorder = this.formatBorder([border.vertical], formatting);
-        return verticalBorder + cells.join(verticalBorder) + verticalBorder;
-    }
-
-    private renderCell(
-        section: TableSection,
-        column: TableColumnModel<Row>,
-        data: unknown,
-        rowIndex: number,
-        columnIndex: number,
-        width: number,
-        formatting: boolean,
+    private apportionWidthChange(
+        widths: number[],
+        columns: FlexibleColumn<EntryType>[],
+        amount: number,
+        capacity: (column: FlexibleColumn<EntryType>) => number,
+        direction = 1,
     )
     {
-        const line = this.createCellLine(section, column, data, rowIndex, columnIndex);
-        const padding = this.cellPadding(section, column);
-        const contentWidth = Math.max(0, width - padding.left.length - padding.right.length);
-        const options = column.definition.cellOptions;
-        const customCell = section === "body" && options?.cell !== undefined;
-        const contentLine = customCell
-            ? this.normalizeLine(line)
-            : this.createAlignedLine(line, options?.align ?? "left", this.cellOverflow(section, column)?.truncate ?? "");
-        const renderedContent = new HorizontalLayout(contentLine).computeString(contentWidth, formatting);
+        if (columns.length === 0)
+            return 0;
 
-        return padding.left + renderedContent + padding.right;
-    }
-
-    private createAlignedLine(line: TerminalLine, align: "left" | "center" | "right", truncator: string): LineDefinition
-    {
-        const normalizedLine = this.normalizeLine(line);
-        const contentElements = normalizedLine[0] instanceof FormattingSettings
-            ? [normalizedLine as FormattingFrame]
-            : normalizedLine as LineElement[];
-
-        if (align === "right")
-        {
-            const rightAlignedLine: LineDefinition = [Flex.grow(" ").shrinkRight(truncator), ...contentElements];
-            return rightAlignedLine;
-        }
-
-        // Center alignment is intentionally approximate in the draft; both sides
-        // participate in growth, while the established layout engine decides remainders.
-        if (align === "center")
-        {
-            const centeredLine: LineDefinition = [Flex.grow(" ").shrinkRight(truncator), ...contentElements, Flex.grow(" ")];
-            return centeredLine;
-        }
-
-        return [...contentElements, Flex.shrinkLeft(truncator).grow(" ")];
-    }
-
-    private createCellLine(
-        section: TableSection,
-        column: TableColumnModel<Row>,
-        data: unknown,
-        rowIndex: number,
-        columnIndex = this.columns.indexOf(column),
-    ): TerminalLine
-    {
-        if (section === "header")
-            return this.selectCellContent(column.definition.headerOptions, column.definition.header, rowIndex, columnIndex);
-
-        if (section === "footer")
-        {
-            const defaultValue = this.readDefaultValue(data, column.identifier);
-            return this.selectCellContent(
-                column.definition.footerOptions,
-                defaultValue,
-                rowIndex,
-                columnIndex,
-                data as Partial<Row>,
-            );
-        }
-
-        const defaultValue = this.readDefaultValue(data, column.identifier);
-        return this.selectCellContent(
-            column.definition.cellOptions,
-            defaultValue,
-            rowIndex,
-            columnIndex,
-            data as Row,
+        const capacities = columns.map(capacity);
+        const { distribution } = distributeIntegerCapped(
+            amount,
+            columns.map(({ column }) => column.flexFactor),
+            capacities,
         );
+
+        let changedWidth = 0;
+        for (const [candidateIndex, { index }] of columns.entries())
+        {
+            widths[index] += direction * distribution[candidateIndex];
+            changedWidth += distribution[candidateIndex];
+        }
+        return changedWidth;
     }
 
-    private selectCellContent<Data>(
-        options: TableSectionCellOptions<Data> | TableCellOptions<Data> | undefined,
-        defaultValue: unknown,
-        rowIndex: number,
-        columnIndex: number,
-        callbackData = defaultValue as Data,
-    ): TerminalLine
+    private get borderWidth()
     {
-        if (options?.cell)
-            return options.cell(callbackData as Data, rowIndex, columnIndex);
-        const value = options?.value
-            ? options.value(callbackData as Data, rowIndex, columnIndex)
-            : defaultValue;
-        return String(value ?? "");
+        return this.resolvedBorder.getWidth(this.columns.length);
     }
 
-    private readDefaultValue(data: unknown, identifier: ColumnIdentifier)
+    private formatBorder(text: string)
     {
-        if (data === undefined || data === null)
-            return "";
-        return (data as Record<PropertyKey, unknown>)[identifier];
-    }
-
-    private normalizeLine(line: TerminalLine): LineDefinition
-    {
-        return typeof line === "string" ? [line] : line;
-    }
-
-    private cellPadding(section: TableSection, column: TableColumnModel<Row>)
-    {
-        if (section === "body" && column.definition.cellOptions?.cell)
-            return { left: "", right: "" };
-        return column.horizontalPadding;
-    }
-
-    private cellOverflow(section: TableSection, column: TableColumnModel<Row>)
-    {
-        if (section === "header")
-            return column.definition.headerOptions?.overflow ?? column.definition.cellOptions?.overflow;
-        if (section === "footer")
-            return column.definition.footerOptions?.overflow ?? column.definition.cellOptions?.overflow;
-        return column.definition.cellOptions?.overflow;
-    }
-
-    private renderBorderLine(position: "top" | "middle" | "bottom", widths: number[], formatting: boolean)
-    {
-        const border = this.resolvedBorder!;
-        const [left, join, right] = position === "top"
-            ? [border.topLeft, border.topJoin, border.topRight]
-            : position === "middle"
-                ? [border.middleLeft, border.middleJoin, border.middleRight]
-                : [border.bottomLeft, border.bottomJoin, border.bottomRight];
-        const fragments = [left, ...widths.flatMap(width => [border.horizontal.repeat(width), join])];
-        fragments[fragments.length - 1] = right;
-        return this.formatBorder(fragments, formatting);
-    }
-
-    private formatBorder(fragments: string[], formatting: boolean)
-    {
-        const text = fragments.join("");
-        if (!formatting || !this.formatting.borderStyle)
+        if (!this.formatting.borderStyle)
             return text;
         return (this.formatting.borderStyle as unknown as { format(value: string): string }).format(text);
     }

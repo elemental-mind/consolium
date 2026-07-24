@@ -26,7 +26,7 @@ export class HorizontalLayout
         return this.cumulativeStringLengths.at(-1)!;
     }
 
-    computeString(targetWidth: number, formatting = true): string
+    computeString(targetWidth: number): string
     {
         let adjustedStrings = this.normalizedStrings;
         const widthDifference = targetWidth - this.unformattedWidth;
@@ -36,9 +36,7 @@ export class HorizontalLayout
         else if (widthDifference > 0)
             adjustedStrings = this.adjustWith(Extension, widthDifference);
 
-        return formatting
-            ? this.formatStrings(adjustedStrings)
-            : adjustedStrings.join("");
+        return this.formatStrings(adjustedStrings);
     }
 
     private parseFormattingFrame(frame: LineDefinition, parentFormatting: FormattingSettings)
