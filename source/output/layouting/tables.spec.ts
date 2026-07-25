@@ -29,7 +29,7 @@ export class TableRenderingTests
             { path: "readme.md", size: 42 },
         ]);
 
-        assert.equal(table.render(), [
+        assert.equal(table.renderLines(), [
             "╭───────────┬──────╮",
             "│ File      │ Size │",
             "├───────────┼──────┤",
@@ -48,7 +48,7 @@ export class TableRenderingTests
         table.data.push({ path: "a.txt", size: 2 });
         table.footerData = { path: "Total", size: 2 };
 
-        assert.equal(table.render(), [
+        assert.equal(table.renderLines(), [
             "File Bytes",
             "a.txt    2",
             "Total    2",
@@ -64,7 +64,7 @@ export class TableRenderingTests
             { path: "readme.md", size: 42 },
         ]);
 
-        assert.equal(table.render(), "readme.md 42");
+        assert.equal(table.renderLines(), "readme.md 42");
     }
 
     supportsPositionalRowsAndAutomaticColumns()
@@ -79,14 +79,14 @@ export class TableRenderingTests
             "1": {},
         }, { border: TableBorder.none }, packages);
 
-        assert.equal(table.render(), [
+        assert.equal(table.renderLines(), [
             "terminalium 0.1.0",
             "unitium     0.8.6",
         ].join("\n"));
 
         const automaticTable = Table.Auto(packages, { border: false });
 
-        assert.equal(automaticTable.render(), [
+        assert.equal(automaticTable.renderLines(), [
             "terminalium0.1.0",
             "unitium    0.8.6",
         ].join("\n"));
