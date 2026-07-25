@@ -81,11 +81,10 @@ export class Table<EntryType>
     static Auto<EntryType extends object>(data: readonly EntryType[], formatting: TableFormatting = {}): Table<EntryType>
     {
         const columnDefinitions = Object.create(null) as Record<string, TableColumnDefinition<EntryType>>;
+        const firstEntry = data[0];
 
-        for (const entry of data)
-            for (const key of Object.keys(entry))
-                if (!Object.hasOwn(columnDefinitions, key))
-                    columnDefinitions[key] = {};
+        for (const key in firstEntry)
+            columnDefinitions[key] = {};
 
         return new Table<EntryType>(columnDefinitions, formatting, data);
     }

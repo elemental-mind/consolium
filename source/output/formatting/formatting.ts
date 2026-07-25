@@ -87,10 +87,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
     }
 
     settings: FormattingInfo = {};
-    get isNullFormatting()
-    {
-        return this.checkForNullFormatting();
-    }
+    isNullFormatting: boolean = true;
 
     private shouldCloneOnChange = true;
 
@@ -98,6 +95,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
     {
         super();
         this.settings = settings;
+        this.isNullFormatting = this.checkForNullFormatting();
     }
 
     fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
@@ -146,6 +144,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
         }
 
         Object.assign(this.settings, settings);
+        this.isNullFormatting = this.checkForNullFormatting();
         return this;
     }
 

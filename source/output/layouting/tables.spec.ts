@@ -92,7 +92,7 @@ export class TableRenderingTests
         ].join("\n"));
     }
 
-    discoversColumnsIntroducedByLaterAutomaticRows()
+    usesEnumerablePropertiesFromTheFirstAutomaticRow()
     {
         const table = Table.Auto([
             { name: "terminalium" },
@@ -100,8 +100,17 @@ export class TableRenderingTests
         ], { border: false });
 
         assert.equal(table.renderLines(), [
-            "terminalium     ",
-            "unitium    0.8.6",
+            "terminalium",
+            "unitium    ",
+        ].join("\n"));
+
+        const prototype = { inherited: "prototype" };
+        const firstRow = Object.assign(Object.create(prototype), { own: "first" }) as { own: string; inherited: string };
+        const inheritedTable = Table.Auto([firstRow, { own: "second", later: "ignored" }], { border: false });
+
+        assert.equal(inheritedTable.renderLines(), [
+            "first prototype",
+            "second         ",
         ].join("\n"));
 
         assert.equal(Table.Auto([]).renderLines(), "");
