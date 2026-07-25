@@ -72,6 +72,10 @@ type FlexibleColumn<EntryType> = {
     index: number;
 };
 
+type ResolvedCellContent =
+    | { layout: ContentLayout; ownsLayout: true; }
+    | { layout: ContentLayout; ownsLayout: false; text: string; };
+
 //----------------------------------------------
 // Implementation Logic
 //----------------------------------------------
@@ -479,15 +483,16 @@ class TableColumn<EntryType>
         if (typeof this.widthConfiguration === "number")
             return this.widthConfiguration;
 
-        const measuredWidths = data.map((entry, rowIndex) =>
-            this.bodyTemplate.measure(entry, rowIndex, columnIndex));
+        let preferredWidth = this.minimumWidth;
+        for (let rowIndex = 0; rowIndex < data.length; rowIndex++)
+            preferredWidth = Math.max(preferredWidth, this.bodyTemplate.measure(data[rowIndex], rowIndex, columnIndex));
 
         if (this.definition.header !== undefined)
-            measuredWidths.push(this.headerTemplate.measure(this.definition.header, 0, columnIndex));
+            preferredWidth = Math.max(preferredWidth, this.headerTemplate.measure(this.definition.header, 0, columnIndex));
         if (footerData !== undefined)
-            measuredWidths.push(this.footerTemplate.measure(footerData, 0, columnIndex));
+            preferredWidth = Math.max(preferredWidth, this.footerTemplate.measure(footerData, 0, columnIndex));
 
-        return Math.max(this.minimumWidth, ...measuredWidths);
+        return preferredWidth;
     }
 
     renderHeaderCell(columnIndex: number, width: number)
@@ -535,8 +540,10 @@ class TableCellTemplate<EntryType, Data>
     measure(data: Data, rowIndex: number, columnIndex: number)
     {
         const content = this.getContent(data, rowIndex, columnIndex);
-        const paddingWidth = content.ownsLayout ? 0 : this.padding.left.length + this.padding.right.length;
-        return new HorizontalLayout(content.layout).unformattedWidth + paddingWidth;
+        if (content.ownsLayout)
+            return new HorizontalLayout(content.layout).unformattedWidth;
+
+        return content.text.length + this.padding.left.length + this.padding.right.length;
     }
 
     render(data: Data, rowIndex: number, columnIndex: number, width: number)
@@ -551,13 +558,15 @@ class TableCellTemplate<EntryType, Data>
         return this.padding.left + renderedContent + this.padding.right;
     }
 
-    private getContent(data: Data, rowIndex: number, columnIndex: number)
+    private getContent(data: Data, rowIndex: number, columnIndex: number): ResolvedCellContent
     {
         const content = this.resolveContent(data, rowIndex, columnIndex);
 
-        return Array.isArray(content)
-            ? { layout: content as ContentLayout, ownsLayout: true }
-            : { layout: [String(content ?? "")] as ContentLayout, ownsLayout: false };
+        if (Array.isArray(content))
+            return { layout: content as ContentLayout, ownsLayout: true };
+
+        const text = String(content ?? "");
+        return { layout: [text], ownsLayout: false, text };
     }
 
     private resolveContent(data: Data, _rowIndex: number, _columnIndex: number): CellContent
