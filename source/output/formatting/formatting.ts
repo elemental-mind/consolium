@@ -87,13 +87,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
     }
 
     settings: FormattingInfo = {};
-
-    get isNullFormatting()
-    {
-        for (const key in this.settings)
-            if (this.settings[key as keyof typeof this.settings] !== false) return false;
-        return true;
-    }
+    isNullFormatting: boolean = true;
 
     private shouldCloneOnChange = true;
 
@@ -101,6 +95,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
     {
         super();
         this.settings = settings;
+        this.isNullFormatting = this.checkForNullFormatting();
     }
 
     fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
@@ -149,7 +144,15 @@ export class FormattingSettings extends FluentFormattingAPIBase
         }
 
         Object.assign(this.settings, settings);
+        this.isNullFormatting = this.checkForNullFormatting();
         return this;
+    }
+
+    private checkForNullFormatting()
+    {
+        for (const key in this.settings)
+            if (this.settings[key as keyof typeof this.settings] !== false) return false;
+        return true;
     }
 
     private getColorStringFromStringLiteral(stringLiteralStaticParts: TemplateStringsArray, stringLiteralDynamicParts: (string | number)[]): HexColor
@@ -169,4 +172,3 @@ export class FormattingSettings extends FluentFormattingAPIBase
 };
 
 export const Formatting = FormattingSettings as any as FormattingAPI;
-

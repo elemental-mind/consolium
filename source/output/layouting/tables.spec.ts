@@ -25,7 +25,7 @@ export class TableRenderingTests
                 },
             },
         } satisfies TableColumns<FileRow>;
-        const table = new Table(columns, { border: TableBorder.rounded }, [
+        const table = new Table(columns, { border: TableBorder.Soft }, [
             { path: "readme.md", size: 42 },
         ]);
 
@@ -43,7 +43,7 @@ export class TableRenderingTests
         const table = new Table<FileRow>({
             path: { header: "File" },
             size: { header: "Bytes", cellOptions: { align: { horizontal: "right" } } },
-        }, { border: TableBorder.none });
+        }, { border: TableBorder.None });
 
         table.data.push({ path: "a.txt", size: 2 });
         table.footerData = { path: "Total", size: 2 };
@@ -60,7 +60,7 @@ export class TableRenderingTests
         const table = new Table<FileRow>({
             path: { cellOptions: { padding: { right: " " } } },
             size: {},
-        }, { border: TableBorder.none }, [
+        }, { border: TableBorder.None }, [
             { path: "readme.md", size: 42 },
         ]);
 
@@ -77,7 +77,7 @@ export class TableRenderingTests
         const table = new Table<PackageRow>({
             "0": { cellOptions: { padding: { right: " " } } },
             "1": {},
-        }, { border: TableBorder.none }, packages);
+        }, { border: TableBorder.None }, packages);
 
         assert.equal(table.renderLines(), [
             "terminalium 0.1.0",

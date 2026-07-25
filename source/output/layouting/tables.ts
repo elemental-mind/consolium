@@ -1,16 +1,40 @@
 import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
 import { Flex } from "./flex.ts";
-import
-{
-    HorizontalLayout,
-    type FormattingFrame,
-    type LineDefinition,
-    type LineElement,
-} from "./horizontalLayout.ts";
+import { HorizontalLayout, type FormattingFrame, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
+
+
+//----------------------------------------
+// Types & Interfaces
+//----------------------------------------
 
 export type ContentLayout = LineDefinition;
 export type CellContent = ContentLayout | string | number | bigint | boolean | object | null | undefined;
+
+export type TableColumns<EntryType> = Record<string, TableColumnDefinition<EntryType>>;
+
+export interface TableColumnDefinition<EntryType>
+{
+    header?: string;
+    headerOptions?: TableSectionCellOptions<string>;
+    cellOptions?: TableCellOptions<EntryType>;
+    footerOptions?: TableSectionCellOptions<Partial<EntryType>>;
+}
+
+export interface TableCellOptions<Data>
+{
+    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
+    width?: number | TableColumnWidth;
+    align?: TableCellAlignment;
+    padding?: string | TableCellPadding;
+    overflow?: TableCellOverflow;
+}
+
+export interface TableSectionCellOptions<Data>
+{
+    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
+    overflow?: TableCellOverflow;
+}
 
 export interface TableColumnWidth
 {
@@ -18,6 +42,12 @@ export interface TableColumnWidth
     max?: number;
     flexFactor?: number;
     contentImportance?: number;
+}
+
+export interface TableFormatting
+{
+    border?: TableBorder | false;
+    borderStyle?: FormattingAPI;
 }
 
 export interface TableCellOverflow
@@ -37,64 +67,26 @@ export interface TableCellPadding
     right?: string;
 }
 
-export interface TableCellOptions<Data>
-{
-    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
-    width?: number | TableColumnWidth;
-    align?: TableCellAlignment;
-    padding?: string | TableCellPadding;
-    overflow?: TableCellOverflow;
-}
-
-export interface TableSectionCellOptions<Data>
-{
-    cell?: (data: Data, rowIndex: number, columnIndex: number) => CellContent;
-    overflow?: TableCellOverflow;
-}
-
-export interface TableColumnDefinition<EntryType>
-{
-    header?: string;
-    headerOptions?: TableSectionCellOptions<string>;
-    cellOptions?: TableCellOptions<EntryType>;
-    footerOptions?: TableSectionCellOptions<Partial<EntryType>>;
-}
-
-export type TableColumns<EntryType> = {
-    readonly [key in string]?: TableColumnDefinition<EntryType>
-};
-
-export interface TableFormatting
-{
-    border?: TableBorder | false;
-    borderStyle?: FormattingAPI;
-}
-
 type FlexibleColumn<EntryType> = {
     column: TableColumn<EntryType>;
     index: number;
 };
+
+//----------------------------------------------
+// Implementation Logic
+//----------------------------------------------
 
 export class Table<EntryType>
 {
     static Auto<EntryType extends object>(data: readonly EntryType[], formatting: TableFormatting = {}): Table<EntryType>
     {
         const firstEntry = data[0];
-        let columnIdentifiers: string[];
+        const columnDefinitions: Record<string, TableColumnDefinition<any>> = {};
 
-        if (Array.isArray(firstEntry))
-            columnIdentifiers = firstEntry.map((_, index) => String(index));
-        else
-        {
-            const encounteredIdentifiers = data.flatMap(entry => Object.keys(entry));
-            columnIdentifiers = [...new Set(encounteredIdentifiers)];
-        }
+        for (const key in firstEntry)
+            columnDefinitions[key] = {};
 
-        const columnDefinitions = Object.fromEntries(
-            columnIdentifiers.map(identifier => [identifier, {}]),
-        );
-
-        return new Table<EntryType>(columnDefinitions as TableColumns<EntryType>, formatting, data);
+        return new Table<EntryType>(columnDefinitions, formatting, data);
     }
 
     data: EntryType[];
@@ -107,8 +99,8 @@ export class Table<EntryType>
     {
         this.columns = this.parseColumnDefinitions(columns);
         const border = formatting.border === false
-            ? TableBorder.none
-            : formatting.border ?? TableBorder.light;
+            ? TableBorder.None
+            : formatting.border ?? TableBorder.Sharp;
         this.border = border.withStyle(formatting.borderStyle);
         this.data = [...data];
     }
@@ -130,7 +122,7 @@ export class Table<EntryType>
         const lines: string[] = [];
         const hasHeaders = this.columns.some(column => column.definition.header !== undefined);
 
-        const topBorder = this.border.renderTop(widths);
+        const topBorder = this.border.renderTopBorder(widths);
         if (topBorder !== undefined)
             lines.push(topBorder);
         if (!hasHeaders)
@@ -139,7 +131,7 @@ export class Table<EntryType>
         const headerCells = this.columns.map((column, index) => column.renderHeaderCell(index, widths[index]));
         lines.push(this.renderRow(headerCells));
 
-        const headerSeparator = this.border.renderSeparator(widths);
+        const headerSeparator = this.border.renderRowSeparator(widths);
         if (headerSeparator !== undefined && (this.data.length > 0 || this.footerData !== undefined))
             lines.push(headerSeparator);
 
@@ -166,7 +158,7 @@ export class Table<EntryType>
 
         if (this.footerData !== undefined)
         {
-            const footerSeparator = this.border.renderSeparator(widths);
+            const footerSeparator = this.border.renderRowSeparator(widths);
             if (footerSeparator !== undefined && this.data.length > 0)
                 lines.push(footerSeparator);
 
@@ -175,7 +167,7 @@ export class Table<EntryType>
             lines.push(this.renderRow(cells));
         }
 
-        const bottomBorder = this.border.renderBottom(widths);
+        const bottomBorder = this.border.renderBottomBorder(widths);
         if (bottomBorder !== undefined)
             lines.push(bottomBorder);
 
@@ -184,7 +176,7 @@ export class Table<EntryType>
 
     private renderRow(cells: string[])
     {
-        return this.border.renderRow(cells);
+        return this.border.renderCellSeparators(cells);
     }
 
     private parseColumnDefinitions(columns: TableColumns<EntryType>)
@@ -276,15 +268,15 @@ export class Table<EntryType>
 
     private get borderWidth()
     {
-        return this.border.getRequiredBorderSpace(this.columns.length);
+        return this.border.getRequiredCellSeparatorSpace(this.columns.length);
     }
 }
 
 export class TableBorder
 {
-    static readonly none = new TableBorder("", "", "", "", "", "", "", "", "", "", "");
-    static readonly light = new TableBorder("┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "─", "│");
-    static readonly rounded = new TableBorder("╭", "┬", "╮", "├", "┼", "┤", "╰", "┴", "╯", "─", "│");
+    static readonly None = new TableBorder("", "", "", "", "", "", "", "", "", "", "");
+    static readonly Sharp = new TableBorder("┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "─", "│");
+    static readonly Soft = new TableBorder("╭", "┬", "╮", "├", "┼", "┤", "╰", "┴", "╯", "─", "│");
 
     private readonly vertical: string;
     private readonly horizontal: string;
@@ -292,14 +284,18 @@ export class TableBorder
     private readonly topLeft: string;
     private readonly topJoin: string;
     private readonly topRight: string;
+
     private readonly middleLeft: string;
     private readonly middleJoin: string;
     private readonly middleRight: string;
+
     private readonly bottomLeft: string;
     private readonly bottomJoin: string;
     private readonly bottomRight: string;
+
     private readonly isVisible: boolean;
-    private readonly style?: FormattingAPI;
+
+    private readonly style: FormattingSettings;
 
     private constructor(
         topLeft: string,
@@ -328,7 +324,7 @@ export class TableBorder
         this.horizontal = horizontal;
         this.vertical = vertical;
         this.isVisible = horizontal.length > 0 || vertical.length > 0;
-        this.style = style;
+        this.style = style as FormattingSettings ?? FormattingSettings.None;
     }
 
     withStyle(style: FormattingAPI | undefined)
@@ -351,31 +347,31 @@ export class TableBorder
         );
     }
 
-    renderTop(columnWidths: number[])
+    getRequiredCellSeparatorSpace(columnCount: number)
+    {
+        return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
+    }
+
+    renderTopBorder(columnWidths: number[])
     {
         return this.renderHorizontalLine(this.topLeft, this.topJoin, this.topRight, columnWidths);
     }
 
-    renderSeparator(columnWidths: number[])
+    renderRowSeparator(columnWidths: number[])
     {
         return this.renderHorizontalLine(this.middleLeft, this.middleJoin, this.middleRight, columnWidths);
     }
 
-    renderBottom(columnWidths: number[])
+    renderBottomBorder(columnWidths: number[])
     {
         return this.renderHorizontalLine(this.bottomLeft, this.bottomJoin, this.bottomRight, columnWidths);
     }
 
-    renderRow(cells: string[])
+    renderCellSeparators(cells: string[])
     {
         if (!this.isVisible) return cells.join("");
-        const verticalBorder = this.format(this.vertical);
+        const verticalBorder = this.style.format(this.vertical);
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
-    }
-
-    getRequiredBorderSpace(columnCount: number)
-    {
-        return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
     }
 
     private renderHorizontalLine(left: string, join: string, right: string, columnWidths: number[])
@@ -384,13 +380,7 @@ export class TableBorder
 
         const fragments = [left, ...columnWidths.flatMap(width => [this.horizontal.repeat(width), join])];
         fragments[fragments.length - 1] = right;
-        return this.format(fragments.join(""));
-    }
-
-    private format(text: string)
-    {
-        if (!this.style) return text;
-        return (this.style as unknown as { format(value: string): string }).format(text);
+        return this.style.format(fragments.join(""));
     }
 }
 
@@ -409,7 +399,11 @@ class TableColumn<EntryType>
         this.definition = definition;
 
         const sharedOptions = definition.cellOptions as TableCellOptions<unknown> | undefined;
-        this.headerTemplate = new TableCellTemplate(this, definition.headerOptions, sharedOptions, true);
+        const headerOptions = {
+            cell: (title: string) => title,
+            ...definition.headerOptions,
+        };
+        this.headerTemplate = new TableCellTemplate(this, headerOptions, sharedOptions);
         this.bodyTemplate = new TableCellTemplate(this, definition.cellOptions, sharedOptions);
         this.footerTemplate = new TableCellTemplate(this, definition.footerOptions, sharedOptions);
     }
@@ -496,14 +490,11 @@ class TableCellTemplate<EntryType, Data>
         column: TableColumn<EntryType>,
         contentOptions: TableSectionCellOptions<Data> | TableCellOptions<Data> | undefined,
         sharedOptions: TableCellOptions<unknown> | undefined,
-        useDataAsDefault = false,
     )
     {
         this.column = column;
         if (contentOptions?.cell)
-            this.selectContent = contentOptions.cell;
-        else if (useDataAsDefault)
-            this.selectContent = data => data as CellContent;
+            this.resolveContent = contentOptions.cell;
         this.alignment = sharedOptions?.align ?? {};
         this.padding = this.parsePadding(sharedOptions?.padding);
         this.overflow = contentOptions?.overflow ?? sharedOptions?.overflow ?? {};
@@ -511,14 +502,14 @@ class TableCellTemplate<EntryType, Data>
 
     measure(data: Data, rowIndex: number, columnIndex: number)
     {
-        const content = this.resolveContent(data, rowIndex, columnIndex);
+        const content = this.getContent(data, rowIndex, columnIndex);
         const paddingWidth = content.ownsLayout ? 0 : this.padding.left.length + this.padding.right.length;
         return new HorizontalLayout(content.layout).unformattedWidth + paddingWidth;
     }
 
     render(data: Data, rowIndex: number, columnIndex: number, width: number)
     {
-        const content = this.resolveContent(data, rowIndex, columnIndex);
+        const content = this.getContent(data, rowIndex, columnIndex);
         if (content.ownsLayout)
             return new HorizontalLayout(content.layout).computeString(width);
 
@@ -528,16 +519,16 @@ class TableCellTemplate<EntryType, Data>
         return this.padding.left + renderedContent + this.padding.right;
     }
 
-    private resolveContent(data: Data, rowIndex: number, columnIndex: number)
+    private getContent(data: Data, rowIndex: number, columnIndex: number)
     {
-        const content = this.selectContent(data, rowIndex, columnIndex);
+        const content = this.resolveContent(data, rowIndex, columnIndex);
 
         return Array.isArray(content)
             ? { layout: content as ContentLayout, ownsLayout: true }
             : { layout: [String(content ?? "")] as ContentLayout, ownsLayout: false };
     }
 
-    private selectContent(data: Data, _rowIndex: number, _columnIndex: number): CellContent
+    private resolveContent(data: Data, _rowIndex: number, _columnIndex: number): CellContent
     {
         return this.column.readValue(data as Partial<EntryType>) as CellContent;
     }
