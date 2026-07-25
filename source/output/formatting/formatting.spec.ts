@@ -161,4 +161,13 @@ export class FormattingChainingTests
 
         assert.equal(formatted, "\u001B[32;3mready\u001B[0m");
     }
+
+    rereadsPublicFormattingSettingsBeforeRendering()
+    {
+        const formatting = new FormattingSettings();
+
+        formatting.settings.foreground = "red";
+
+        assert.equal(formatting.format("important"), "\u001B[31mimportant\u001B[0m");
+    }
 }

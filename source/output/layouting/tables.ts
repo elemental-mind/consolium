@@ -80,11 +80,12 @@ export class Table<EntryType>
 {
     static Auto<EntryType extends object>(data: readonly EntryType[], formatting: TableFormatting = {}): Table<EntryType>
     {
-        const firstEntry = data[0];
-        const columnDefinitions: Record<string, TableColumnDefinition<any>> = {};
+        const columnDefinitions = Object.create(null) as Record<string, TableColumnDefinition<EntryType>>;
 
-        for (const key in firstEntry)
-            columnDefinitions[key] = {};
+        for (const entry of data)
+            for (const key of Object.keys(entry))
+                if (!Object.hasOwn(columnDefinitions, key))
+                    columnDefinitions[key] = {};
 
         return new Table<EntryType>(columnDefinitions, formatting, data);
     }
@@ -107,6 +108,9 @@ export class Table<EntryType>
 
     renderLines(preferredWidth: number = -1)
     {
+        if (!Number.isInteger(preferredWidth) || preferredWidth < -1)
+            throw new RangeError("The preferred table width must be a non-negative integer or -1.");
+
         const widths = this.resolveColumnWidths(preferredWidth);
         const lines = [
             ...this.renderHeader(widths),
@@ -376,7 +380,7 @@ export class TableBorder
 
     private renderHorizontalLine(left: string, join: string, right: string, columnWidths: number[])
     {
-        if (!this.isVisible) return undefined;
+        if (!this.isVisible || columnWidths.length === 0) return undefined;
 
         const fragments = [left, ...columnWidths.flatMap(width => [this.horizontal.repeat(width), join])];
         fragments[fragments.length - 1] = right;
@@ -397,6 +401,7 @@ class TableColumn<EntryType>
     {
         this.identifier = identifier;
         this.definition = definition;
+        this.validateWidthConfiguration();
 
         const sharedOptions = definition.cellOptions as TableCellOptions<unknown> | undefined;
         const headerOptions = {
@@ -440,6 +445,34 @@ class TableColumn<EntryType>
     {
         const width = this.widthConfiguration;
         return typeof width === "object" ? width.contentImportance ?? 0 : Infinity;
+    }
+
+    private validateWidthConfiguration()
+    {
+        const width = this.widthConfiguration;
+        if (width === undefined) return;
+
+        if (typeof width === "number")
+        {
+            this.validateColumnWidth(width, "width");
+            return;
+        }
+
+        this.validateColumnWidth(width.min, "minimum width");
+        if (width.max !== undefined && (!Number.isInteger(width.max) || width.max < 0))
+            throw new RangeError("The maximum width must be a non-negative integer.");
+        if (width.min !== undefined && width.max !== undefined && width.min > width.max)
+            throw new RangeError("The minimum width cannot exceed the maximum width.");
+        if (width.flexFactor !== undefined && (!Number.isFinite(width.flexFactor) || width.flexFactor <= 0))
+            throw new RangeError("The flex factor must be a positive finite number.");
+        if (width.contentImportance !== undefined && !Number.isFinite(width.contentImportance))
+            throw new RangeError("The content importance must be finite.");
+    }
+
+    private validateColumnWidth(width: number | undefined, label: string)
+    {
+        if (width !== undefined && (!Number.isInteger(width) || width < 0))
+            throw new RangeError(`The ${label} must be a non-negative integer.`);
     }
 
     measurePreferredWidth(data: EntryType[], footerData: Partial<EntryType> | undefined, columnIndex: number)

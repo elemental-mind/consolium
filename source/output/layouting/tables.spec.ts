@@ -91,4 +91,30 @@ export class TableRenderingTests
             "unitium    0.8.6",
         ].join("\n"));
     }
+
+    discoversColumnsIntroducedByLaterAutomaticRows()
+    {
+        const table = Table.Auto([
+            { name: "terminalium" },
+            { name: "unitium", version: "0.8.6" },
+        ], { border: false });
+
+        assert.equal(table.renderLines(), [
+            "terminalium     ",
+            "unitium    0.8.6",
+        ].join("\n"));
+
+        assert.equal(Table.Auto([]).renderLines(), "");
+    }
+
+    rejectsInvalidTableDimensions()
+    {
+        assert.throws(() => new Table({ value: { cellOptions: { width: -1 } } }), RangeError);
+        assert.throws(() => new Table({ value: { cellOptions: { width: { min: 3, max: 2 } } } }), RangeError);
+        assert.throws(() => new Table({ value: { cellOptions: { width: { flexFactor: 0 } } } }), RangeError);
+
+        const table = new Table({ value: {} }, { border: false }, [{ value: "ok" }]);
+        assert.throws(() => table.renderLines(-2), RangeError);
+        assert.throws(() => table.renderLines(1.5), RangeError);
+    }
 }
