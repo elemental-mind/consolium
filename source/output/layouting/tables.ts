@@ -114,7 +114,7 @@ export class Table<EntryType>
         if (!Number.isInteger(preferredWidth) || preferredWidth < -1)
             throw new RangeError("The preferred table width must be a non-negative integer or -1.");
 
-        const cache = new TableRenderCache<EntryType>();
+        const cache: TableContentCache<EntryType> = new Map();
         const widths = this.resolveColumnWidths(preferredWidth, cache);
         const lines = [
             ...this.renderHeader(widths, cache),
@@ -125,7 +125,7 @@ export class Table<EntryType>
         return lines.join("\n");
     }
 
-    private renderHeader(widths: number[], cache: TableRenderCache<EntryType>)
+    private renderHeader(widths: number[], cache: TableContentCache<EntryType>)
     {
         const lines: string[] = [];
         const hasHeaders = this.columns.some(column => column.definition.header !== undefined);
@@ -146,7 +146,7 @@ export class Table<EntryType>
         return lines;
     }
 
-    private renderBody(widths: number[], cache: TableRenderCache<EntryType>)
+    private renderBody(widths: number[], cache: TableContentCache<EntryType>)
     {
         const lines: string[] = [];
 
@@ -160,7 +160,7 @@ export class Table<EntryType>
         return lines;
     }
 
-    private renderFooter(widths: number[], cache: TableRenderCache<EntryType>)
+    private renderFooter(widths: number[], cache: TableContentCache<EntryType>)
     {
         const lines: string[] = [];
 
@@ -193,7 +193,7 @@ export class Table<EntryType>
             new TableColumn(identifier, definition as TableColumnDefinition<EntryType>));
     }
 
-    private resolveColumnWidths(requestedTableWidth: number, cache: TableRenderCache<EntryType>)
+    private resolveColumnWidths(requestedTableWidth: number, cache: TableContentCache<EntryType>)
     {
         const widths = this.columns.map((column, columnIndex) =>
         {
@@ -483,7 +483,7 @@ class TableColumn<EntryType>
         data: EntryType[],
         footerData: Partial<EntryType> | undefined,
         columnIndex: number,
-        cache: TableRenderCache<EntryType>,
+        cache: TableContentCache<EntryType>,
     )
     {
         if (typeof this.widthConfiguration === "number")
@@ -491,29 +491,69 @@ class TableColumn<EntryType>
 
         let preferredWidth = this.minimumWidth;
         for (let rowIndex = 0; rowIndex < data.length; rowIndex++)
-            preferredWidth = Math.max(preferredWidth, cache.getBody(this.bodyTemplate, data[rowIndex], rowIndex, columnIndex).preferredWidth);
+            preferredWidth = Math.max(preferredWidth, this.getBodyContent(data[rowIndex], rowIndex, columnIndex, cache).preferredWidth);
 
         if (this.definition.header !== undefined)
-            preferredWidth = Math.max(preferredWidth, cache.getHeader(this.headerTemplate, this.definition.header, columnIndex).preferredWidth);
+            preferredWidth = Math.max(preferredWidth, this.getHeaderContent(columnIndex, cache).preferredWidth);
         if (footerData !== undefined)
-            preferredWidth = Math.max(preferredWidth, cache.getFooter(this.footerTemplate, footerData, columnIndex).preferredWidth);
+            preferredWidth = Math.max(preferredWidth, this.getFooterContent(footerData, columnIndex, cache).preferredWidth);
 
         return preferredWidth;
     }
 
-    renderHeaderCell(columnIndex: number, width: number, cache: TableRenderCache<EntryType>)
+    renderHeaderCell(columnIndex: number, width: number, cache: TableContentCache<EntryType>)
     {
-        return cache.getHeader(this.headerTemplate, this.definition.header ?? "", columnIndex).render(width);
+        return this.getHeaderContent(columnIndex, cache).render(width);
     }
 
-    renderBodyCell(entry: EntryType, rowIndex: number, columnIndex: number, width: number, cache: TableRenderCache<EntryType>)
+    renderBodyCell(entry: EntryType, rowIndex: number, columnIndex: number, width: number, cache: TableContentCache<EntryType>)
     {
-        return cache.getBody(this.bodyTemplate, entry, rowIndex, columnIndex).render(width);
+        return this.getBodyContent(entry, rowIndex, columnIndex, cache).render(width);
     }
 
-    renderFooterCell(footerData: Partial<EntryType>, columnIndex: number, width: number, cache: TableRenderCache<EntryType>)
+    renderFooterCell(footerData: Partial<EntryType>, columnIndex: number, width: number, cache: TableContentCache<EntryType>)
     {
-        return cache.getFooter(this.footerTemplate, footerData, columnIndex).render(width);
+        return this.getFooterContent(footerData, columnIndex, cache).render(width);
+    }
+
+    private getHeaderContent(columnIndex: number, contentCache: TableContentCache<EntryType>)
+    {
+        const cache = this.getCache(contentCache);
+        return cache.header ??= this.headerTemplate.resolve(this.definition.header ?? "", 0, columnIndex);
+    }
+
+    private getBodyContent(entry: EntryType, rowIndex: number, columnIndex: number, contentCache: TableContentCache<EntryType>)
+    {
+        const cache = this.getCache(contentCache);
+        let rowContents = cache.body.get(entry);
+        if (!rowContents)
+        {
+            rowContents = [];
+            cache.body.set(entry, rowContents);
+        }
+
+        return rowContents[rowIndex] ??= this.bodyTemplate.resolve(entry, rowIndex, columnIndex);
+    }
+
+    private getFooterContent(
+        footerData: Partial<EntryType>,
+        columnIndex: number,
+        contentCache: TableContentCache<EntryType>,
+    )
+    {
+        const cache = this.getCache(contentCache);
+        return cache.footer ??= this.footerTemplate.resolve(footerData, 0, columnIndex);
+    }
+
+    private getCache(contentCache: TableContentCache<EntryType>): TableColumnContentCache<EntryType>
+    {
+        let cache = contentCache.get(this);
+        if (!cache)
+        {
+            cache = { body: new Map() };
+            contentCache.set(this, cache);
+        }
+        return cache;
     }
 
     readValue(data: EntryType | Partial<EntryType>)
@@ -625,25 +665,10 @@ class ResolvedTableCell
     }
 }
 
-class TableRenderCache<EntryType>
-{
-    private readonly headerCells: (ResolvedTableCell | undefined)[] = [];
-    private readonly bodyCells: (ResolvedTableCell | undefined)[][] = [];
-    private readonly footerCells: (ResolvedTableCell | undefined)[] = [];
+type TableContentCache<EntryType> = Map<TableColumn<EntryType>, TableColumnContentCache<EntryType>>;
 
-    getHeader(template: TableCellTemplate<EntryType, string>, header: string, columnIndex: number)
-    {
-        return this.headerCells[columnIndex] ??= template.resolve(header, 0, columnIndex);
-    }
-
-    getBody(template: TableCellTemplate<EntryType, EntryType>, entry: EntryType, rowIndex: number, columnIndex: number)
-    {
-        const rowCells = this.bodyCells[rowIndex] ??= [];
-        return rowCells[columnIndex] ??= template.resolve(entry, rowIndex, columnIndex);
-    }
-
-    getFooter(template: TableCellTemplate<EntryType, Partial<EntryType>>, footerData: Partial<EntryType>, columnIndex: number)
-    {
-        return this.footerCells[columnIndex] ??= template.resolve(footerData, 0, columnIndex);
-    }
-}
+type TableColumnContentCache<EntryType> = {
+    body: Map<EntryType, (ResolvedTableCell | undefined)[]>;
+    header?: ResolvedTableCell;
+    footer?: ResolvedTableCell;
+};

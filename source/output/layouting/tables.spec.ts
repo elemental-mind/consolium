@@ -59,6 +59,7 @@ export class TableRenderingTests
     {
         type Row = { value: string; };
         const calls = { header: 0, body: 0, footer: 0 };
+        const sharedRow = { value: "one" };
         const table = new Table<Row>({
             value: {
                 header: "Name",
@@ -69,9 +70,9 @@ export class TableRenderingTests
                     },
                 },
                 cellOptions: {
-                    cell: row => {
+                    cell: (row, rowIndex) => {
                         calls.body++;
-                        return [`B:${row.value}`];
+                        return [`B:${row.value}:${rowIndex}`];
                     },
                 },
                 footerOptions: {
@@ -81,16 +82,16 @@ export class TableRenderingTests
                     },
                 },
             },
-        }, { border: false }, [{ value: "one" }, { value: "two" }]);
+        }, { border: false }, [sharedRow, sharedRow]);
         table.footerData = { value: "all" };
 
-        assert.equal(table.renderLines(), "H:Name\nB:one\nB:two\nF:all");
+        assert.equal(table.renderLines(), "H:Name\nB:one:0\nB:one:1\nF:all");
         assert.deepEqual(calls, { header: 1, body: 2, footer: 1 });
 
         table.data[0] = { value: "next" };
         table.footerData = { value: "updated" };
 
-        assert.equal(table.renderLines(), "H:Name\nB:next\nB:two\nF:updated");
+        assert.equal(table.renderLines(), "H:Name\nB:next:0\nB:one:1\nF:updated");
         assert.deepEqual(calls, { header: 2, body: 4, footer: 2 });
     }
 
