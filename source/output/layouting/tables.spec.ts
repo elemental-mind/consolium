@@ -55,6 +55,45 @@ export class TableRenderingTests
         ].join("\n"));
     }
 
+    resolvesCustomCellContentOncePerRenderPass()
+    {
+        type Row = { value: string; };
+        const calls = { header: 0, body: 0, footer: 0 };
+        const table = new Table<Row>({
+            value: {
+                header: "Name",
+                headerOptions: {
+                    cell: value => {
+                        calls.header++;
+                        return [`H:${value}`];
+                    },
+                },
+                cellOptions: {
+                    cell: row => {
+                        calls.body++;
+                        return [`B:${row.value}`];
+                    },
+                },
+                footerOptions: {
+                    cell: row => {
+                        calls.footer++;
+                        return [`F:${row.value}`];
+                    },
+                },
+            },
+        }, { border: false }, [{ value: "one" }, { value: "two" }]);
+        table.footerData = { value: "all" };
+
+        assert.equal(table.renderLines(), "H:Name\nB:one\nB:two\nF:all");
+        assert.deepEqual(calls, { header: 1, body: 2, footer: 1 });
+
+        table.data[0] = { value: "next" };
+        table.footerData = { value: "updated" };
+
+        assert.equal(table.renderLines(), "H:Name\nB:next\nB:two\nF:updated");
+        assert.deepEqual(calls, { header: 2, body: 4, footer: 2 });
+    }
+
     rendersWithoutStructuralLinesWhenTheBorderIsNone()
     {
         const table = new Table<FileRow>({
