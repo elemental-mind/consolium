@@ -1,6 +1,6 @@
 import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
-import { HorizontalLayout, type FormattingFrame, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
+import { HorizontalLayout, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
 
 
 //----------------------------------------
@@ -51,14 +51,9 @@ export interface TableFormatting
     borderStyle?: FormattingAPI;
 }
 
-interface TableBorderLine
-{
-    left: string;
-    join: string;
-    right: string;
-}
+type TableBorderLine = Record<"left" | "join" | "right", string>;
 
-interface TableBorderOptions
+type TableBorderOptions =
 {
     top: TableBorderLine;
     middle: TableBorderLine;
@@ -144,15 +139,15 @@ export class Table<EntryType>
 
         let headerCells: ParsedCellContent[] | undefined;
         if (this.headerData)
-            headerCells = this.extractCells([this.headerData], "headerCell", columnWidths);
+            headerCells = this.getCellContents([this.headerData], "headerCellAccessor", columnWidths);
 
         let bodyCells: ParsedCellContent[] | undefined;
         if (this.bodyData.length)
-            bodyCells = this.extractCells(this.bodyData, "bodyCell", columnWidths);
+            bodyCells = this.getCellContents(this.bodyData, "bodyCellAccessor", columnWidths);
 
         let footerCells: ParsedCellContent[] | undefined;
         if (this.footerData)
-            footerCells = this.extractCells([this.footerData], "footerCell", columnWidths);
+            footerCells = this.getCellContents([this.footerData], "footerCellAccessor", columnWidths);
 
         const widths = this.computeAdjustedContentWidths(preferredOverallTableWidth, columnWidths);
         const hasHeader = headerCells !== undefined;
@@ -193,9 +188,9 @@ export class Table<EntryType>
         return lines;
     }
 
-    private extractCells(
+    private getCellContents(
         data: Partial<EntryType>[],
-        accessor: "headerCell" | "bodyCell" | "footerCell",
+        accessor: "headerCellAccessor" | "bodyCellAccessor" | "footerCellAccessor",
         columnWidths: number[],
     ): ParsedCellContent[]
     {
@@ -251,20 +246,23 @@ export class Table<EntryType>
             return widths;
 
         if (widthDifference > 0)
-        {
-            const { distribution } = distributeIntegerCapped(
-                widthDifference,
-                this.columns.map(column => column.isFlexible ? column.flexFactor : 0),
-                this.columns.map((column, index) => column.isFlexible ? column.maximumWidth - widths[index] : 0),
-            );
-
-            for (let i = 0; i < widths.length; i++)
-                widths[i] += distribution[i];
-        }
+            this.growFlexibleColumns(widths, widthDifference);
         else
             this.shrinkFlexibleColumns(widths, -widthDifference);
 
         return widths;
+    }
+
+    private growFlexibleColumns(contentWidths: number[], amount: number)
+    {
+        const { distribution } = distributeIntegerCapped(
+            amount,
+            this.columns.map(column => column.isFlexible ? column.flexFactor : 0),
+            this.columns.map((column, index) => column.isFlexible ? column.maximumWidth - contentWidths[index] : 0),
+        );
+
+        for (let i = 0; i < contentWidths.length; i++)
+            contentWidths[i] += distribution[i];
     }
 
     private shrinkFlexibleColumns(contentWidths: number[], amount: number)
@@ -317,9 +315,10 @@ class TableColumn<EntryType>
     readonly flexFactor: number;
     readonly contentImportance: number;
 
-    readonly headerCell: NonNullable<TableSectionCellOptions<any>["cell"]>;
-    readonly bodyCell: NonNullable<TableCellOptions<EntryType>["cell"]>;
-    readonly footerCell: NonNullable<TableSectionCellOptions<any>["cell"]>;
+    readonly headerCellAccessor: NonNullable<TableSectionCellOptions<any>["cell"]>;
+    readonly bodyCellAccessor: NonNullable<TableCellOptions<EntryType>["cell"]>;
+    readonly footerCellAccessor: NonNullable<TableSectionCellOptions<any>["cell"]>;
+
     readonly padding: Required<TableCellPadding>;
     readonly paddingSize: number;
 
@@ -356,9 +355,9 @@ class TableColumn<EntryType>
         }
 
         const defaultCell = (data: any) => data[identifier];
-        this.headerCell = definition.headerOptions?.cell ?? defaultCell;
-        this.bodyCell = definition.cellOptions?.cell ?? defaultCell;
-        this.footerCell = definition.footerOptions?.cell ?? defaultCell;
+        this.headerCellAccessor = definition.headerOptions?.cell ?? defaultCell;
+        this.bodyCellAccessor = definition.cellOptions?.cell ?? defaultCell;
+        this.footerCellAccessor = definition.footerOptions?.cell ?? defaultCell;
 
         const padding = definition.cellOptions?.padding ?? "";
         this.padding = typeof padding === "string"
@@ -405,15 +404,18 @@ class TableColumn<EntryType>
     private validateWidthConfiguration(width: number | TableColumnWidth | undefined)
     {
         if (width === undefined) return;
+        const isInvalidWidth = (value: number | undefined) => value !== undefined && (!Number.isInteger(value) || value < 0);
 
         if (typeof width === "number")
         {
-            this.validateColumnWidth(width, "width");
+            if (isInvalidWidth(width))
+                throw new RangeError("The width must be a non-negative integer.");
             return;
         }
 
-        this.validateColumnWidth(width.minContentWidth, "minimum width");
-        if (width.maxContentWidth !== undefined && (!Number.isInteger(width.maxContentWidth) || width.maxContentWidth < 0))
+        if (isInvalidWidth(width.minContentWidth))
+            throw new RangeError("The minimum width must be a non-negative integer.");
+        if (isInvalidWidth(width.maxContentWidth))
             throw new RangeError("The maximum width must be a non-negative integer.");
         if (width.minContentWidth !== undefined && width.maxContentWidth !== undefined && width.minContentWidth > width.maxContentWidth)
             throw new RangeError("The minimum width cannot exceed the maximum width.");
@@ -421,12 +423,6 @@ class TableColumn<EntryType>
             throw new RangeError("The flex factor must be a positive finite number.");
         if (width.contentImportance !== undefined && !Number.isFinite(width.contentImportance))
             throw new RangeError("The content importance must be finite.");
-    }
-
-    private validateColumnWidth(width: number | undefined, label: string)
-    {
-        if (width !== undefined && (!Number.isInteger(width) || width < 0))
-            throw new RangeError(`The ${label} must be a non-negative integer.`);
     }
 }
 
