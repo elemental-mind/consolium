@@ -130,10 +130,8 @@ export class Table<EntryType>
 
     get emptyWidth()
     {
-        //This calculates the width of the table with all columns not containing any content
-        const separatorWidths = this.border.getRequiredCellSeparatorSpace(this.columns.length);
-        const paddingWidths = this.columns.reduce((total, column) => total + column.paddingSize, 0);
-        return separatorWidths + paddingWidths;
+        return this.border.getRequiredCellSeparatorSpace(this.columns.length)
+            + this.columns.reduce((total, column) => total + column.paddingSize, 0);
     }
 
     renderLines(preferredOverallTableWidth: number = -1)
@@ -170,13 +168,13 @@ export class Table<EntryType>
     {
         const cells = new Array(data.length * this.columns.length);
 
-        let cellIndex = 0, rowIndex = 0, columnIndex = 0;
-        for (let row of data)
+        let cellIndex = 0;
+        for (let rowIndex = 0; rowIndex < data.length; rowIndex++)
         {
-            columnIndex = 0;
-            for (const columnAccessor of accessors)
+            const row = data[rowIndex];
+            for (let columnIndex = 0; columnIndex < accessors.length; columnIndex++)
             {
-                const rawCellContent = columnAccessor(row, rowIndex, columnIndex);
+                const rawCellContent = accessors[columnIndex](row, rowIndex, columnIndex);
                 if (Array.isArray(rawCellContent))
                 {
                     const content = new HorizontalLayout(rawCellContent as LineElement[]);
@@ -185,22 +183,13 @@ export class Table<EntryType>
                 }
                 else
                 {
-                    let content: string;
-
-                    if (rawCellContent === undefined || rawCellContent === null)
-                        content = "";
-                    else
-                        content = String(rawCellContent);
-
+                    const content = String(rawCellContent ?? "");
                     cells[cellIndex] = content;
                     columnWidths[columnIndex] = Math.max(columnWidths[columnIndex] ?? 0, content.length);
                 }
 
-                columnIndex++;
                 cellIndex++;
             }
-
-            rowIndex++;
         }
 
         return cells;
@@ -230,11 +219,11 @@ export class Table<EntryType>
         if (!bodyContents)
             return [];
 
-        const lines: string[] = new Array<string>(this.bodyData!.length);
+        const lines: string[] = new Array<string>(this.bodyData.length);
         const lineCells: string[] = new Array<string>(this.columns.length);
 
         const columnCount = this.columns.length;
-        const rowCount = this.bodyData!.length;
+        const rowCount = this.bodyData.length;
 
         let cellIndex = 0;
 
@@ -244,7 +233,7 @@ export class Table<EntryType>
             {
                 const column = this.columns[columnIndex];
                 const content = bodyContents[cellIndex];
-                const contentWidth = Math.max(0, contentWidths[columnIndex]);
+                const contentWidth = contentWidths[columnIndex];
 
                 lineCells[columnIndex] = this.renderCell(content, contentWidth, column);
             }
@@ -261,7 +250,7 @@ export class Table<EntryType>
 
         if (footerContents)
         {
-            if (this.border.isVisible && this.bodyData && this.bodyData.length > 0)
+            if (this.border.isVisible && this.bodyData.length > 0)
                 lines.push(this.border.renderRowSeparator(this.columns, widths)!);
 
             const adjustedContent = this.columns.map(column => this.renderCell(footerContents[column.index], widths[column.index], column));
@@ -299,12 +288,9 @@ export class Table<EntryType>
         if (widthDifference === 0)
             return widths;
 
-        let deltas: number[] = [];
-
-        if (widthDifference > 0)
-            deltas = this.growFlexibleColumns(widths, widthDifference);
-        else if (widthDifference < 0)
-            deltas = this.shrinkFlexibleColumns(widths, -widthDifference);
+        const deltas = widthDifference > 0
+            ? this.growFlexibleColumns(widths, widthDifference)
+            : this.shrinkFlexibleColumns(widths, -widthDifference);
 
         for (let i = 0; i < widths.length; i++)
             widths[i] += deltas[i];
@@ -440,16 +426,16 @@ class TableColumn<EntryType>
         }
         else
         {
-            this.minimumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.minContentWidth ?? 0;
-            this.maximumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.maxContentWidth ?? Infinity;
-            this.flexFactor = widthConfiguration?.flexFactor ?? 1;
-            this.contentImportance = widthConfiguration?.contentImportance ?? 0;
+            this.minimumWidth = widthConfiguration.minContentWidth ?? 0;
+            this.maximumWidth = widthConfiguration.maxContentWidth ?? Infinity;
+            this.flexFactor = widthConfiguration.flexFactor ?? 1;
+            this.contentImportance = widthConfiguration.contentImportance ?? 0;
         }
 
         this.isFlexible = this.maximumWidth > this.minimumWidth;
 
         this.headerOptions = {
-            cell: definition.headerOptions?.cell ?? ((headerData, columnIndex, column) => (headerData as any)[identifier]),
+            cell: definition.headerOptions?.cell ?? (headerData => (headerData as any)[identifier]),
             overflow: definition.headerOptions?.overflow ?? definition.cellOptions?.overflow ?? {},
         };
         this.cellOptions = {
@@ -460,7 +446,7 @@ class TableColumn<EntryType>
             overflow: definition.cellOptions?.overflow ?? {},
         };
         this.footerOptions = {
-            cell: definition.footerOptions?.cell ?? ((headerData, columnIndex, column) => (headerData as any)[identifier]),
+            cell: definition.footerOptions?.cell ?? (headerData => (headerData as any)[identifier]),
             overflow: definition.footerOptions?.overflow ?? definition.cellOptions?.overflow ?? {},
         };
 
