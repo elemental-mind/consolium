@@ -161,5 +161,4 @@ export class FormattingChainingTests
 
         assert.equal(formatted, "\u001B[32;3mready\u001B[0m");
     }
-
 }

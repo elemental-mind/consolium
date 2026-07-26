@@ -112,7 +112,8 @@ export class Table<EntryType>
 
     constructor(columns: TableColumns<EntryType>, formatting: TableFormatting = {}, data?: EntryType[], footerData?: Partial<EntryType>)
     {
-        this.columns = this.parseColumnDefinitions(columns);
+        this.columns = Object.entries(columns)
+            .map(([identifier, definition], index) => new TableColumn(index, identifier, definition));
         const border = formatting.border === false ? TableBorder.None : formatting.border ?? TableBorder.Sharp;
         this.border = border.withStyle(formatting.borderStyle);
 
@@ -143,28 +144,60 @@ export class Table<EntryType>
 
         let headerCells: ParsedCellContent[] | undefined;
         if (this.headerData)
-            headerCells = this.extractCellContentAndTrackContentWidths([this.headerData], this.columns.map(column => column.headerOptions.cell), columnWidths);
+            headerCells = this.extractCells([this.headerData], "headerCell", columnWidths);
 
         let bodyCells: ParsedCellContent[] | undefined;
         if (this.bodyData.length)
-            bodyCells = this.extractCellContentAndTrackContentWidths(this.bodyData, this.columns.map(column => column.cellOptions.cell), columnWidths);
+            bodyCells = this.extractCells(this.bodyData, "bodyCell", columnWidths);
 
         let footerCells: ParsedCellContent[] | undefined;
         if (this.footerData)
-            footerCells = this.extractCellContentAndTrackContentWidths([this.footerData], this.columns.map(column => column.footerOptions.cell), columnWidths);
+            footerCells = this.extractCells([this.footerData], "footerCell", columnWidths);
 
-        const adjustedContentWidths = this.computeAdjustedContentWidths(preferredOverallTableWidth, columnWidths);
+        const widths = this.computeAdjustedContentWidths(preferredOverallTableWidth, columnWidths);
+        const hasHeader = headerCells !== undefined;
+        const hasFooter = footerCells !== undefined;
+        const separatesHeader = this.border.isVisible && hasHeader && (this.bodyData.length > 0 || Boolean(this.footerData));
+        const separatesFooter = this.border.isVisible && hasFooter && this.bodyData.length > 0;
+        const lines = new Array<string>(
+            Number(hasHeader) + this.bodyData.length + Number(hasFooter)
+            + (this.border.isVisible ? 2 : 0) + Number(separatesHeader) + Number(separatesFooter),
+        );
+        const renderedCells = new Array<string>(this.columns.length);
+        let lineIndex = 0;
 
-        const lines = [
-            ...this.renderHeader(headerCells, adjustedContentWidths),
-            ...this.renderBody(bodyCells, adjustedContentWidths),
-            ...this.renderFooter(footerCells, adjustedContentWidths),
-        ];
+        if (this.border.isVisible)
+            lines[lineIndex++] = this.border.renderHorizontalLine("top", this.columns, widths)!;
+
+        if (headerCells)
+        {
+            lines[lineIndex++] = this.renderRow(headerCells, 0, widths, renderedCells);
+            if (separatesHeader)
+                lines[lineIndex++] = this.border.renderHorizontalLine("middle", this.columns, widths)!;
+        }
+
+        if (bodyCells)
+            for (let rowIndex = 0; rowIndex < this.bodyData.length; rowIndex++)
+                lines[lineIndex++] = this.renderRow(bodyCells, rowIndex * this.columns.length, widths, renderedCells);
+
+        if (footerCells)
+        {
+            if (separatesFooter)
+                lines[lineIndex++] = this.border.renderHorizontalLine("middle", this.columns, widths)!;
+            lines[lineIndex++] = this.renderRow(footerCells, 0, widths, renderedCells);
+        }
+
+        if (this.border.isVisible)
+            lines[lineIndex] = this.border.renderHorizontalLine("bottom", this.columns, widths)!;
 
         return lines;
     }
 
-    extractCellContentAndTrackContentWidths(data: Partial<EntryType>[], accessors: Function[], columnWidths: number[]): ParsedCellContent[]
+    private extractCells(
+        data: Partial<EntryType>[],
+        accessor: "headerCell" | "bodyCell" | "footerCell",
+        columnWidths: number[],
+    ): ParsedCellContent[]
     {
         const cells = new Array(data.length * this.columns.length);
 
@@ -172,9 +205,10 @@ export class Table<EntryType>
         for (let rowIndex = 0; rowIndex < data.length; rowIndex++)
         {
             const row = data[rowIndex];
-            for (let columnIndex = 0; columnIndex < accessors.length; columnIndex++)
+            for (let columnIndex = 0; columnIndex < this.columns.length; columnIndex++)
             {
-                const rawCellContent = accessors[columnIndex](row, rowIndex, columnIndex);
+                const column = this.columns[columnIndex];
+                const rawCellContent = (column[accessor] as Function)(row, rowIndex, columnIndex, column);
                 if (Array.isArray(rawCellContent))
                 {
                     const content = new HorizontalLayout(rawCellContent as LineElement[]);
@@ -195,84 +229,12 @@ export class Table<EntryType>
         return cells;
     }
 
-    private renderHeader(headerContents: ParsedCellContent[] | undefined, contentWidths: number[])
+    private renderRow(contents: ParsedCellContent[], offset: number, widths: number[], renderedCells: string[])
     {
-        const lines: string[] = [];
+        for (const column of this.columns)
+            renderedCells[column.index] = column.render(contents[offset + column.index], widths[column.index]);
 
-        if (this.border.isVisible)
-            lines.push(this.border.renderTopBorder(this.columns, contentWidths)!);
-
-        if (!headerContents)
-            return lines;
-
-        const adjustedContent = this.columns.map(column => this.renderCell(headerContents[column.index], contentWidths[column.index], column));
-        lines.push(this.border.renderCellsWithCellSeparators(adjustedContent));
-
-        if (this.border.isVisible && ((this.bodyData && this.bodyData.length > 0) || this.footerData))
-            lines.push(this.border.renderRowSeparator(this.columns, contentWidths)!);
-
-        return lines;
-    }
-
-    private renderBody(bodyContents: ParsedCellContent[] | undefined, contentWidths: number[])
-    {
-        if (!bodyContents)
-            return [];
-
-        const lines: string[] = new Array<string>(this.bodyData.length);
-        const lineCells: string[] = new Array<string>(this.columns.length);
-
-        const columnCount = this.columns.length;
-        const rowCount = this.bodyData.length;
-
-        let cellIndex = 0;
-
-        for (let rowIndex = 0; rowIndex < rowCount; rowIndex++)
-        {
-            for (let columnIndex = 0; columnIndex < columnCount; columnIndex++, cellIndex++)
-            {
-                const column = this.columns[columnIndex];
-                const content = bodyContents[cellIndex];
-                const contentWidth = contentWidths[columnIndex];
-
-                lineCells[columnIndex] = this.renderCell(content, contentWidth, column);
-            }
-
-            lines[rowIndex] = this.border.renderCellsWithCellSeparators(lineCells);
-        }
-
-        return lines;
-    }
-
-    private renderFooter(footerContents: ParsedCellContent[] | undefined, widths: number[])
-    {
-        const lines: string[] = [];
-
-        if (footerContents)
-        {
-            if (this.border.isVisible && this.bodyData.length > 0)
-                lines.push(this.border.renderRowSeparator(this.columns, widths)!);
-
-            const adjustedContent = this.columns.map(column => this.renderCell(footerContents[column.index], widths[column.index], column));
-            lines.push(this.border.renderCellsWithCellSeparators(adjustedContent));
-        }
-
-        if (this.border.isVisible)
-            lines.push(this.border.renderBottomBorder(this.columns, widths)!);
-
-        return lines;
-    }
-
-    private renderCell(cellContent: string | HorizontalLayout, contentWidth: number, column: TableColumn<any>): string
-    {
-        let cellBody = cellContent instanceof HorizontalLayout ? cellContent.computeString(contentWidth) : cellContent;
-
-        if (cellBody.length > contentWidth)
-            cellBody = column.contentOverflowHandler(cellBody, contentWidth);
-        else if (cellBody.length < contentWidth)
-            cellBody = column.contentUnderflowHandler(cellBody, contentWidth);
-
-        return column.padding.left + cellBody + column.padding.right;
+        return this.border.renderCellsWithCellSeparators(renderedCells);
     }
 
     private computeAdjustedContentWidths(requestedOverallTableWidth: number, rawColumnWidths: number[])
@@ -288,28 +250,25 @@ export class Table<EntryType>
         if (widthDifference === 0)
             return widths;
 
-        const deltas = widthDifference > 0
-            ? this.growFlexibleColumns(widths, widthDifference)
-            : this.shrinkFlexibleColumns(widths, -widthDifference);
+        if (widthDifference > 0)
+        {
+            const { distribution } = distributeIntegerCapped(
+                widthDifference,
+                this.columns.map(column => column.isFlexible ? column.flexFactor : 0),
+                this.columns.map((column, index) => column.isFlexible ? column.maximumWidth - widths[index] : 0),
+            );
 
-        for (let i = 0; i < widths.length; i++)
-            widths[i] += deltas[i];
+            for (let i = 0; i < widths.length; i++)
+                widths[i] += distribution[i];
+        }
+        else
+            this.shrinkFlexibleColumns(widths, -widthDifference);
 
         return widths;
     }
 
-    private growFlexibleColumns(contentWidths: number[], amount: number)
-    {
-        return distributeIntegerCapped(
-            amount,
-            this.columns.map(column => column.isFlexible ? column.flexFactor : 0),
-            this.columns.map((column, index) => column.isFlexible ? column.maximumWidth - contentWidths[index] : 0),
-        ).distribution;
-    }
-
     private shrinkFlexibleColumns(contentWidths: number[], amount: number)
     {
-        const deltas = new Array<number>(this.columns.length).fill(0);
         const flexColIndicesGroupedByImportance = new Map<number, number[]>();
         for (let i = 0; i < this.columns.length; i++)
             if (this.columns[i].isFlexible)
@@ -325,7 +284,7 @@ export class Table<EntryType>
             {
                 const columnIndex = columnIndices[0];
                 const shrinkAmount = Math.min(amount, contentWidths[columnIndex] - this.columns[columnIndex].minimumWidth);
-                deltas[columnIndex] = -shrinkAmount;
+                contentWidths[columnIndex] -= shrinkAmount;
                 amount -= shrinkAmount;
             }
             else
@@ -337,71 +296,35 @@ export class Table<EntryType>
                 );
 
                 for (let i = 0; i < columnIndices.length; i++)
-                    deltas[columnIndices[i]] = -distribution[i];
+                    contentWidths[columnIndices[i]] -= distribution[i];
 
                 amount = undistributedAmount;
             }
 
             if (amount === 0) break;
         }
-
-        return deltas;
-    }
-
-    private parseColumnDefinitions(columns: TableColumns<EntryType>)
-    {
-        return Object.entries(columns).map(([identifier, definition], index) => new TableColumn(index, identifier, definition as TableColumnDefinition<EntryType>));
     }
 }
 
 class TableColumn<EntryType>
 {
-    private static leftAlignContent(content: string, width: number)
-    {
-        return content + " ".repeat(width - content.length);
-    }
-
-    private static rightAlignContent(content: string, width: number)
-    {
-        return " ".repeat(width - content.length) + content;
-    }
-
-    private static centerAlignContent(content: string, width: number)
-    {
-        const leftLength = Math.ceil((width - content.length) / 2);
-        return " ".repeat(leftLength) + content + " ".repeat(width - content.length - leftLength);
-    }
-
-    private static truncateContentLeft(content: string, width: number, truncator: string)
-    {
-        const shrinkBy = Math.min(content.length - width, Math.max(0, content.length - 3));
-        return truncator + content.slice(shrinkBy + truncator.length);
-    }
-
-    private static truncateContentRight(content: string, width: number, truncator: string)
-    {
-        const shrinkBy = Math.min(content.length - width, Math.max(0, content.length - 3));
-        return content.slice(0, -(shrinkBy + truncator.length)) + truncator;
-    }
-
     readonly index: number;
     readonly identifier: string;
     readonly header?: string;
 
-    readonly isFlexible: boolean;
     readonly minimumWidth: number;
     readonly maximumWidth: number;
     readonly flexFactor: number;
     readonly contentImportance: number;
 
-    readonly headerOptions: Required<TableSectionCellOptions<EntryType>>;
-    readonly cellOptions: Required<TableCellOptions<EntryType>>;
-    readonly footerOptions: Required<TableSectionCellOptions<Partial<EntryType>>>;
+    readonly headerCell: NonNullable<TableSectionCellOptions<any>["cell"]>;
+    readonly bodyCell: NonNullable<TableCellOptions<EntryType>["cell"]>;
+    readonly footerCell: NonNullable<TableSectionCellOptions<any>["cell"]>;
     readonly padding: Required<TableCellPadding>;
     readonly paddingSize: number;
 
-    readonly contentUnderflowHandler: (content: string, width: number) => string;
-    readonly contentOverflowHandler: (content: string, width: number) => string;
+    private readonly alignment: NonNullable<TableCellAlignment["horizontal"]>;
+    private readonly truncator: string;
 
     constructor(index: number, identifier: string, definition: TableColumnDefinition<EntryType>)
     {
@@ -432,44 +355,51 @@ class TableColumn<EntryType>
             this.contentImportance = widthConfiguration.contentImportance ?? 0;
         }
 
-        this.isFlexible = this.maximumWidth > this.minimumWidth;
+        const defaultCell = (data: any) => data[identifier];
+        this.headerCell = definition.headerOptions?.cell ?? defaultCell;
+        this.bodyCell = definition.cellOptions?.cell ?? defaultCell;
+        this.footerCell = definition.footerOptions?.cell ?? defaultCell;
 
-        this.headerOptions = {
-            cell: definition.headerOptions?.cell ?? (headerData => (headerData as any)[identifier]),
-            overflow: definition.headerOptions?.overflow ?? definition.cellOptions?.overflow ?? {},
-        };
-        this.cellOptions = {
-            cell: definition.cellOptions?.cell ?? (data => (data as any)[identifier]),
-            width: definition.cellOptions?.width ?? {},
-            align: definition.cellOptions?.align ?? {},
-            padding: definition.cellOptions?.padding ?? "",
-            overflow: definition.cellOptions?.overflow ?? {},
-        };
-        this.footerOptions = {
-            cell: definition.footerOptions?.cell ?? (headerData => (headerData as any)[identifier]),
-            overflow: definition.footerOptions?.overflow ?? definition.cellOptions?.overflow ?? {},
-        };
-
-        this.padding = this.parsePadding(this.cellOptions.padding);
+        const padding = definition.cellOptions?.padding ?? "";
+        this.padding = typeof padding === "string"
+            ? { left: padding, right: padding }
+            : { left: padding.left ?? "", right: padding.right ?? "" };
         this.paddingSize = this.padding.left.length + this.padding.right.length;
-        const truncator = this.cellOptions.overflow.truncate ?? "";
-
-        this.contentUnderflowHandler = this.cellOptions.align.horizontal === "right"
-            ? TableColumn.rightAlignContent
-            : this.cellOptions.align.horizontal === "center"
-                ? TableColumn.centerAlignContent
-                : TableColumn.leftAlignContent;
-        this.contentOverflowHandler = this.cellOptions.align.horizontal === "right"
-            ? (content, width) => TableColumn.truncateContentRight(content, width, truncator)
-            : (content, width) => TableColumn.truncateContentLeft(content, width, truncator);
+        this.alignment = definition.cellOptions?.align?.horizontal ?? "left";
+        this.truncator = definition.cellOptions?.overflow?.truncate ?? "";
     }
 
-    private parsePadding(padding: string | TableCellPadding): Required<TableCellPadding>
+    get isFlexible()
     {
-        if (typeof padding === "string")
-            return { left: padding, right: padding };
+        return this.maximumWidth > this.minimumWidth;
+    }
 
-        return { left: padding.left ?? "", right: padding.right ?? "" };
+    render(cell: ParsedCellContent, width: number)
+    {
+        let content = cell instanceof HorizontalLayout ? cell.computeString(width) : cell;
+
+        if (content.length > width)
+        {
+            const shrinkBy = Math.min(content.length - width, Math.max(0, content.length - 3));
+            content = this.alignment === "right"
+                ? this.truncator + content.slice(shrinkBy + this.truncator.length)
+                : content.slice(0, -(shrinkBy + this.truncator.length)) + this.truncator;
+        }
+        else if (content.length < width)
+        {
+            const remainingWidth = width - content.length;
+            if (this.alignment === "right")
+                content = " ".repeat(remainingWidth) + content;
+            else if (this.alignment === "center")
+            {
+                const leftWidth = Math.ceil(remainingWidth / 2);
+                content = " ".repeat(leftWidth) + content + " ".repeat(remainingWidth - leftWidth);
+            }
+            else
+                content += " ".repeat(remainingWidth);
+        }
+
+        return this.padding.left + content + this.padding.right;
     }
 
     private validateWidthConfiguration(width: number | TableColumnWidth | undefined)
@@ -524,24 +454,13 @@ export class TableBorder
         vertical: "│",
     });
 
-    readonly vertical: string;
-    readonly horizontal: string;
-
-    readonly top: TableBorderLine;
-    readonly middle: TableBorderLine;
-    readonly bottom: TableBorderLine;
-
     readonly style: FormattingSettings;
-
     readonly isVisible: boolean;
+    private readonly definition: TableBorderOptions;
 
     private constructor(options: TableBorderOptions)
     {
-        this.top = options.top;
-        this.middle = options.middle;
-        this.bottom = options.bottom;
-        this.horizontal = options.horizontal;
-        this.vertical = options.vertical;
+        this.definition = options;
         this.isVisible = options.horizontal.length > 0 || options.vertical.length > 0;
         this.style = options.style as FormattingSettings ?? FormattingSettings.None;
     }
@@ -551,11 +470,7 @@ export class TableBorder
         if (!style) return this;
 
         return new TableBorder({
-            top: this.top,
-            middle: this.middle,
-            bottom: this.bottom,
-            horizontal: this.horizontal,
-            vertical: this.vertical,
+            ...this.definition,
             style,
         });
     }
@@ -565,35 +480,21 @@ export class TableBorder
         return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
     }
 
-    renderTopBorder(columns: TableColumn<any>[], contentWidths: number[])
-    {
-        return this.renderHorizontalLine(this.top, columns, contentWidths);
-    }
-
-    renderRowSeparator(columns: TableColumn<any>[], contentWidths: number[])
-    {
-        return this.renderHorizontalLine(this.middle, columns, contentWidths);
-    }
-
-    renderBottomBorder(columns: TableColumn<any>[], contentWidths: number[])
-    {
-        return this.renderHorizontalLine(this.bottom, columns, contentWidths);
-    }
-
     renderCellsWithCellSeparators(cells: string[])
     {
         if (!this.isVisible) return cells.join("");
-        const verticalBorder = this.style.format(this.vertical);
+        const verticalBorder = this.style.format(this.definition.vertical);
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
     }
 
-    private renderHorizontalLine(line: TableBorderLine, columns: TableColumn<any>[], contentWidths: number[])
+    renderHorizontalLine(position: "top" | "middle" | "bottom", columns: TableColumn<any>[], contentWidths: number[])
     {
         if (!this.isVisible || columns.length === 0) return undefined;
 
+        const line = this.definition[position];
         const fragments = [line.left];
         for (const column of columns)
-            fragments.push(this.horizontal.repeat(column.paddingSize + contentWidths[column.index]), line.join);
+            fragments.push(this.definition.horizontal.repeat(column.paddingSize + contentWidths[column.index]), line.join);
 
         fragments[fragments.length - 1] = line.right;
 
