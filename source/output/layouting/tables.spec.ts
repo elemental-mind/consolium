@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { Table, TableBorder, type TableColumns } from "./tables.ts";
 
 type FileRow =
-{
-    path: string;
-    size: number;
-};
+    {
+        path: string;
+        size: number;
+    };
 
 export class TableRenderingTests
 {
@@ -29,13 +29,13 @@ export class TableRenderingTests
             { path: "readme.md", size: 42 },
         ]);
 
-        assert.equal(table.renderLines(), [
+        assert.deepEqual(table.renderLines(), [
             "╭───────────┬──────╮",
             "│ File      │ Size │",
             "├───────────┼──────┤",
             "│ readme.md │ 42 B │",
             "╰───────────┴──────╯",
-        ].join("\n"));
+        ]);
     }
 
     rereadsMutableDataAndFooterForEveryRender()
@@ -45,14 +45,14 @@ export class TableRenderingTests
             size: { header: "Bytes", cellOptions: { align: { horizontal: "right" } } },
         }, { border: TableBorder.None });
 
-        table.data.push({ path: "a.txt", size: 2 });
+        table.bodyData.push({ path: "a.txt", size: 2 });
         table.footerData = { path: "Total", size: 2 };
 
-        assert.equal(table.renderLines(), [
+        assert.deepEqual(table.renderLines(), [
             "File Bytes",
             "a.txt    2",
             "Total    2",
-        ].join("\n"));
+        ]);
     }
 
     resolvesCustomCellContentOncePerRenderPass()
@@ -64,19 +64,22 @@ export class TableRenderingTests
             value: {
                 header: "Name",
                 headerOptions: {
-                    cell: value => {
+                    cell: value =>
+                    {
                         calls.header++;
                         return [`H:${value}`];
                     },
                 },
                 cellOptions: {
-                    cell: (row, rowIndex) => {
+                    cell: (row, rowIndex) =>
+                    {
                         calls.body++;
                         return [`B:${row.value}:${rowIndex}`];
                     },
                 },
                 footerOptions: {
-                    cell: row => {
+                    cell: row =>
+                    {
                         calls.footer++;
                         return [`F:${row.value}`];
                     },
@@ -85,13 +88,13 @@ export class TableRenderingTests
         }, { border: false }, [sharedRow, sharedRow]);
         table.footerData = { value: "all" };
 
-        assert.equal(table.renderLines(), "H:Name\nB:one:0\nB:one:1\nF:all");
+        assert.deepEqual(table.renderLines(), ["H:Name", "B:one:0", "B:one:1", "F:all"]);
         assert.deepEqual(calls, { header: 1, body: 2, footer: 1 });
 
-        table.data[0] = { value: "next" };
+        table.bodyData[0] = { value: "next" };
         table.footerData = { value: "updated" };
 
-        assert.equal(table.renderLines(), "H:Name\nB:next:0\nB:one:1\nF:updated");
+        assert.deepEqual(table.renderLines(), ["H:Name", "B:next:0", "B:one:1", "F:updated"]);
         assert.deepEqual(calls, { header: 2, body: 4, footer: 2 });
     }
 
@@ -104,7 +107,7 @@ export class TableRenderingTests
             { path: "readme.md", size: 42 },
         ]);
 
-        assert.equal(table.renderLines(), "readme.md 42");
+        assert.deepEqual(table.renderLines(), ["readme.md 42"]);
     }
 
     supportsPositionalRowsAndAutomaticColumns()
@@ -119,17 +122,17 @@ export class TableRenderingTests
             "1": {},
         }, { border: TableBorder.None }, packages);
 
-        assert.equal(table.renderLines(), [
+        assert.deepEqual(table.renderLines(), [
             "terminalium 0.1.0",
             "unitium     0.8.6",
-        ].join("\n"));
+        ]);
 
         const automaticTable = Table.Auto(packages, { border: false });
 
-        assert.equal(automaticTable.renderLines(), [
+        assert.deepEqual(automaticTable.renderLines(), [
             "terminalium0.1.0",
             "unitium    0.8.6",
-        ].join("\n"));
+        ]);
     }
 
     usesEnumerablePropertiesFromTheFirstAutomaticRow()
@@ -139,21 +142,21 @@ export class TableRenderingTests
             { name: "unitium", version: "0.8.6" },
         ], { border: false });
 
-        assert.equal(table.renderLines(), [
+        assert.deepEqual(table.renderLines(), [
             "terminalium",
             "unitium    ",
-        ].join("\n"));
+        ]);
 
         const prototype = { inherited: "prototype" };
-        const firstRow = Object.assign(Object.create(prototype), { own: "first" }) as { own: string; inherited: string };
+        const firstRow = Object.assign(Object.create(prototype), { own: "first" }) as { own: string; inherited: string; };
         const inheritedTable = Table.Auto([firstRow, { own: "second", later: "ignored" }], { border: false });
 
-        assert.equal(inheritedTable.renderLines(), [
+        assert.deepEqual(inheritedTable.renderLines(), [
             "first prototype",
             "second         ",
-        ].join("\n"));
+        ]);
 
-        assert.equal(Table.Auto([]).renderLines(), "");
+        assert.deepEqual(Table.Auto([]).renderLines(), []);
     }
 
     rejectsInvalidTableDimensions()
