@@ -1,6 +1,5 @@
 import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
-import { Flex } from "./flex.ts";
 import { HorizontalLayout, type FormattingFrame, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
 
 
@@ -34,14 +33,14 @@ export interface TableCellOptions<Data>
 
 export interface TableSectionCellOptions<Data>
 {
-    cell?: (data: Partial<Data>, rowIndex: number, columnIndex: number, column: TableColumn<Data>) => CellContent;
+    cell?: (headerOrFooterData: Partial<Data>, rowIndex: number, columnIndex: number, column: TableColumn<Data>) => CellContent;
     overflow?: TableCellOverflow;
 }
 
 export interface TableColumnWidth
 {
-    min?: number;
-    max?: number;
+    minContentWidth?: number;
+    maxContentWidth?: number;
     flexFactor?: number;
     contentImportance?: number;
 }
@@ -94,6 +93,7 @@ export class Table<EntryType>
 {
     static Auto<EntryType extends object>(data: EntryType[], formatting: TableFormatting = {}): Table<EntryType>
     {
+        if (!data.length) throw new Error("Provide at least one data point to infer a shema from.");
         const columnDefinitions = Object.create(null) as Record<string, TableColumnDefinition<EntryType>>;
         const firstEntry = data[0];
 
@@ -107,28 +107,25 @@ export class Table<EntryType>
     border: TableBorder;
 
     headerData?: Partial<EntryType>;
-    bodyData?: EntryType[];
+    bodyData: EntryType[];
     footerData?: Partial<EntryType>;
 
-    constructor(columns: TableColumns<EntryType>, formatting: TableFormatting = {}, data?: EntryType[])
+    constructor(columns: TableColumns<EntryType>, formatting: TableFormatting = {}, data?: EntryType[], footerData?: Partial<EntryType>)
     {
         this.columns = this.parseColumnDefinitions(columns);
         const border = formatting.border === false ? TableBorder.None : formatting.border ?? TableBorder.Sharp;
         this.border = border.withStyle(formatting.borderStyle);
 
-        this.bodyData = data;
-
-        const headerData = Object.create(null) as Partial<EntryType>;
-        let hasHeaders = false;
+        const headerData = {} as Record<string, any>;
         for (const column of this.columns)
-        {
-            if (column.header === undefined) continue;
+            headerData[column.identifier] = column.header;
 
-            (headerData as Record<string, unknown>)[column.identifier] = column.header;
-            hasHeaders = true;
-        }
-        if (hasHeaders)
-            this.headerData = headerData;
+        if (Object.values(headerData).some(header => header !== undefined))
+            this.headerData = headerData as Partial<EntryType>;
+
+        this.bodyData = data ?? [];
+
+        this.footerData = footerData;
     }
 
     get emptyWidth()
@@ -139,8 +136,11 @@ export class Table<EntryType>
         return separatorWidths + paddingWidths;
     }
 
-    renderLines(preferredWidth: number = -1)
+    renderLines(preferredOverallTableWidth: number = -1)
     {
+        if (!Number.isInteger(preferredOverallTableWidth) || preferredOverallTableWidth < -1)
+            throw new RangeError("The preferred overall table width must be -1 or a non-negative integer.");
+
         const columnWidths = new Array<number>(this.columns.length).fill(0);
 
         let headerCells: ParsedCellContent[] | undefined;
@@ -148,19 +148,19 @@ export class Table<EntryType>
             headerCells = this.extractCellContentAndTrackContentWidths([this.headerData], this.columns.map(column => column.headerOptions.cell), columnWidths);
 
         let bodyCells: ParsedCellContent[] | undefined;
-        if (this.bodyData && this.bodyData.length)
+        if (this.bodyData.length)
             bodyCells = this.extractCellContentAndTrackContentWidths(this.bodyData, this.columns.map(column => column.cellOptions.cell), columnWidths);
 
         let footerCells: ParsedCellContent[] | undefined;
         if (this.footerData)
             footerCells = this.extractCellContentAndTrackContentWidths([this.footerData], this.columns.map(column => column.footerOptions.cell), columnWidths);
 
-        const widths = this.computeColumnWidths(preferredWidth, columnWidths);
+        const adjustedContentWidths = this.computeAdjustedContentWidths(preferredOverallTableWidth, columnWidths);
 
         const lines = [
-            ...this.renderHeader(headerCells, widths),
-            ...this.renderBody(bodyCells, widths),
-            ...this.renderFooter(footerCells, widths),
+            ...this.renderHeader(headerCells, adjustedContentWidths),
+            ...this.renderBody(bodyCells, adjustedContentWidths),
+            ...this.renderFooter(footerCells, adjustedContentWidths),
         ];
 
         return lines;
@@ -206,26 +206,26 @@ export class Table<EntryType>
         return cells;
     }
 
-    private renderHeader(headerContents: ParsedCellContent[] | undefined, widths: number[])
+    private renderHeader(headerContents: ParsedCellContent[] | undefined, contentWidths: number[])
     {
         const lines: string[] = [];
 
         if (this.border.isVisible)
-            lines.push(this.border.renderTopBorder(widths)!);
+            lines.push(this.border.renderTopBorder(this.columns, contentWidths)!);
 
         if (!headerContents)
             return lines;
 
-        const adjustedContent = this.columns.map(column => this.renderCell(headerContents[column.index], widths[column.index], column));
+        const adjustedContent = this.columns.map(column => this.renderCell(headerContents[column.index], contentWidths[column.index], column));
         lines.push(this.border.renderCellsWithCellSeparators(adjustedContent));
 
         if (this.border.isVisible && ((this.bodyData && this.bodyData.length > 0) || this.footerData))
-            lines.push(this.border.renderRowSeparator(widths)!);
+            lines.push(this.border.renderRowSeparator(this.columns, contentWidths)!);
 
         return lines;
     }
 
-    private renderBody(bodyContents: ParsedCellContent[] | undefined, widths: number[])
+    private renderBody(bodyContents: ParsedCellContent[] | undefined, contentWidths: number[])
     {
         if (!bodyContents)
             return [];
@@ -244,9 +244,7 @@ export class Table<EntryType>
             {
                 const column = this.columns[columnIndex];
                 const content = bodyContents[cellIndex];
-                const cellBodyWidth = widths[columnIndex];
-
-                const contentWidth = Math.max(0, cellBodyWidth - column.paddingSize);
+                const contentWidth = Math.max(0, contentWidths[columnIndex]);
 
                 lineCells[columnIndex] = this.renderCell(content, contentWidth, column);
             }
@@ -264,14 +262,14 @@ export class Table<EntryType>
         if (footerContents)
         {
             if (this.border.isVisible && this.bodyData && this.bodyData.length > 0)
-                lines.push(this.border.renderRowSeparator(widths)!);
+                lines.push(this.border.renderRowSeparator(this.columns, widths)!);
 
             const adjustedContent = this.columns.map(column => this.renderCell(footerContents[column.index], widths[column.index], column));
             lines.push(this.border.renderCellsWithCellSeparators(adjustedContent));
         }
 
         if (this.border.isVisible)
-            lines.push(this.border.renderBottomBorder(widths)!);
+            lines.push(this.border.renderBottomBorder(this.columns, widths)!);
 
         return lines;
     }
@@ -288,14 +286,14 @@ export class Table<EntryType>
         return column.padding.left + cellBody + column.padding.right;
     }
 
-    private computeColumnWidths(requestedTableWidth: number, rawColumnWidths: number[])
+    private computeAdjustedContentWidths(requestedOverallTableWidth: number, rawColumnWidths: number[])
     {
         const widths = [...rawColumnWidths];
 
-        if (requestedTableWidth < 0)
+        if (requestedOverallTableWidth < 0)
             return widths;
 
-        const availableWidth = Math.max(0, requestedTableWidth - this.emptyWidth);
+        const availableWidth = Math.max(0, requestedOverallTableWidth - this.emptyWidth);
         const widthDifference = availableWidth - widths.reduce((total, width) => total + width, 0);
 
         if (widthDifference === 0)
@@ -442,8 +440,8 @@ class TableColumn<EntryType>
         }
         else
         {
-            this.minimumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.min ?? 0;
-            this.maximumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.max ?? Infinity;
+            this.minimumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.minContentWidth ?? 0;
+            this.maximumWidth = typeof widthConfiguration === "number" ? widthConfiguration : widthConfiguration?.maxContentWidth ?? Infinity;
             this.flexFactor = widthConfiguration?.flexFactor ?? 1;
             this.contentImportance = widthConfiguration?.contentImportance ?? 0;
         }
@@ -498,10 +496,10 @@ class TableColumn<EntryType>
             return;
         }
 
-        this.validateColumnWidth(width.min, "minimum width");
-        if (width.max !== undefined && (!Number.isInteger(width.max) || width.max < 0))
+        this.validateColumnWidth(width.minContentWidth, "minimum width");
+        if (width.maxContentWidth !== undefined && (!Number.isInteger(width.maxContentWidth) || width.maxContentWidth < 0))
             throw new RangeError("The maximum width must be a non-negative integer.");
-        if (width.min !== undefined && width.max !== undefined && width.min > width.max)
+        if (width.minContentWidth !== undefined && width.maxContentWidth !== undefined && width.minContentWidth > width.maxContentWidth)
             throw new RangeError("The minimum width cannot exceed the maximum width.");
         if (width.flexFactor !== undefined && (!Number.isFinite(width.flexFactor) || width.flexFactor <= 0))
             throw new RangeError("The flex factor must be a positive finite number.");
@@ -532,7 +530,7 @@ export class TableBorder
         horizontal: "─",
         vertical: "│",
     });
-    static readonly Soft = new TableBorder({
+    static readonly Rounded = new TableBorder({
         top: { left: "╭", join: "┬", right: "╮" },
         middle: { left: "├", join: "┼", right: "┤" },
         bottom: { left: "╰", join: "┴", right: "╯" },
@@ -581,19 +579,19 @@ export class TableBorder
         return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
     }
 
-    renderTopBorder(columnWidths: number[])
+    renderTopBorder(columns: TableColumn<any>[], contentWidths: number[])
     {
-        return this.renderHorizontalLine(this.top, columnWidths);
+        return this.renderHorizontalLine(this.top, columns, contentWidths);
     }
 
-    renderRowSeparator(columnWidths: number[])
+    renderRowSeparator(columns: TableColumn<any>[], contentWidths: number[])
     {
-        return this.renderHorizontalLine(this.middle, columnWidths);
+        return this.renderHorizontalLine(this.middle, columns, contentWidths);
     }
 
-    renderBottomBorder(columnWidths: number[])
+    renderBottomBorder(columns: TableColumn<any>[], contentWidths: number[])
     {
-        return this.renderHorizontalLine(this.bottom, columnWidths);
+        return this.renderHorizontalLine(this.bottom, columns, contentWidths);
     }
 
     renderCellsWithCellSeparators(cells: string[])
@@ -603,12 +601,16 @@ export class TableBorder
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
     }
 
-    private renderHorizontalLine(line: TableBorderLine, columnWidths: number[])
+    private renderHorizontalLine(line: TableBorderLine, columns: TableColumn<any>[], contentWidths: number[])
     {
-        if (!this.isVisible || columnWidths.length === 0) return undefined;
+        if (!this.isVisible || columns.length === 0) return undefined;
 
-        const fragments = [line.left, ...columnWidths.flatMap(width => [this.horizontal.repeat(width), line.join])];
+        const fragments = [line.left];
+        for (const column of columns)
+            fragments.push(this.horizontal.repeat(column.paddingSize + contentWidths[column.index]), line.join);
+
         fragments[fragments.length - 1] = line.right;
+
         return this.style.format(fragments.join(""));
     }
 }

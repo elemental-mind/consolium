@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Debug } from "unitium";
 import { Table, TableBorder, type TableColumns } from "./tables.ts";
 
 type FileRow =
@@ -14,7 +15,7 @@ export class TableRenderingTests
         const columns = {
             path: {
                 header: "File",
-                cellOptions: { padding: { left: " ", right: " " }, width: { min: 8 } },
+                cellOptions: { padding: { left: " ", right: " " }, width: { minContentWidth: 8 } },
             },
             size: {
                 header: "Size",
@@ -25,7 +26,7 @@ export class TableRenderingTests
                 },
             },
         } satisfies TableColumns<FileRow>;
-        const table = new Table(columns, { border: TableBorder.Soft }, [
+        const table = new Table(columns, { border: TableBorder.Rounded }, [
             { path: "readme.md", size: 42 },
         ]);
 
@@ -64,10 +65,10 @@ export class TableRenderingTests
             value: {
                 header: "Name",
                 headerOptions: {
-                    cell: value =>
+                    cell: headerData =>
                     {
                         calls.header++;
-                        return [`H:${value}`];
+                        return [`H:${headerData.value}`];
                     },
                 },
                 cellOptions: {
@@ -78,23 +79,31 @@ export class TableRenderingTests
                     },
                 },
                 footerOptions: {
-                    cell: row =>
+                    cell: footerData =>
                     {
                         calls.footer++;
-                        return [`F:${row.value}`];
+                        return [`F:${footerData.value}`];
                     },
                 },
             },
         }, { border: false }, [sharedRow, sharedRow]);
         table.footerData = { value: "all" };
 
-        assert.deepEqual(table.renderLines(), ["H:Name", "B:one:0", "B:one:1", "F:all"]);
+        assert.deepEqual(table.renderLines(), [
+            "H:Name ",
+            "B:one:0",
+            "B:one:1",
+            "F:all  "]);
         assert.deepEqual(calls, { header: 1, body: 2, footer: 1 });
 
         table.bodyData[0] = { value: "next" };
         table.footerData = { value: "updated" };
 
-        assert.deepEqual(table.renderLines(), ["H:Name", "B:next:0", "B:one:1", "F:updated"]);
+        assert.deepEqual(table.renderLines(), [
+            "H:Name   ",
+            "B:next:0 ",
+            "B:one:1  ",
+            "F:updated"]);
         assert.deepEqual(calls, { header: 2, body: 4, footer: 2 });
     }
 
@@ -156,13 +165,13 @@ export class TableRenderingTests
             "second         ",
         ]);
 
-        assert.deepEqual(Table.Auto([]).renderLines(), []);
+        assert.throws(() => Table.Auto([]).renderLines());
     }
 
     rejectsInvalidTableDimensions()
     {
         assert.throws(() => new Table({ value: { cellOptions: { width: -1 } } }), RangeError);
-        assert.throws(() => new Table({ value: { cellOptions: { width: { min: 3, max: 2 } } } }), RangeError);
+        assert.throws(() => new Table({ value: { cellOptions: { width: { minContentWidth: 3, maxContentWidth: 2 } } } }), RangeError);
         assert.throws(() => new Table({ value: { cellOptions: { width: { flexFactor: 0 } } } }), RangeError);
 
         const table = new Table({ value: {} }, { border: false }, [{ value: "ok" }]);
