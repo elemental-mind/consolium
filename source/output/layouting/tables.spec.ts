@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Debug } from "unitium";
+import { Formatting } from "../formatting/formatting.ts";
 import { Table, TableBorder, type TableColumns } from "./tables.ts";
 
 type FileRow =
@@ -112,7 +113,7 @@ export class TableRenderingTests
         const table = new Table<FileRow>({
             path: { cellOptions: { padding: { right: " " } } },
             size: {},
-        }, { border: TableBorder.None }, [
+        }, { border: false, borderStyle: Formatting.green }, [
             { path: "readme.md", size: 42 },
         ]);
 

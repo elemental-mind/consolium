@@ -2,16 +2,12 @@ import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
 import { HorizontalLayout, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
 
-
 //----------------------------------------
 // Types & Interfaces
 //----------------------------------------
 
 export type FormattedCellContent = LineDefinition;
 export type CellContent = FormattedCellContent | string | number | bigint | boolean | object | null | undefined;
-
-type ParsedCellContent = string | HorizontalLayout;
-
 export type TableColumns<EntryType> = Record<string, TableColumnDefinition<EntryType>>;
 
 export interface TableColumnDefinition<EntryType>
@@ -22,19 +18,17 @@ export interface TableColumnDefinition<EntryType>
     footerOptions?: TableSectionCellOptions<any>;
 }
 
-export interface TableCellOptions<Data>
+export interface TableSectionCellOptions<Data>
 {
     cell?: (data: Data, rowIndex: number, columnIndex: number, column: TableColumn<Data>) => CellContent;
-    width?: number | TableColumnWidth;
-    align?: TableCellAlignment;
-    padding?: string | TableCellPadding;
     overflow?: TableCellOverflow;
 }
 
-export interface TableSectionCellOptions<Data>
+export interface TableCellOptions<Data> extends TableSectionCellOptions<Data>
 {
-    cell?: (headerOrFooterData: Partial<Data>, rowIndex: number, columnIndex: number, column: TableColumn<Data>) => CellContent;
-    overflow?: TableCellOverflow;
+    width?: number | TableColumnWidth;
+    align?: TableCellAlignment;
+    padding?: string | TableCellPadding;
 }
 
 export interface TableColumnWidth
@@ -49,18 +43,6 @@ export interface TableFormatting
 {
     border?: TableBorder | false;
     borderStyle?: FormattingAPI;
-}
-
-type TableBorderLine = Record<"left" | "join" | "right", string>;
-
-type TableBorderOptions =
-{
-    top: TableBorderLine;
-    middle: TableBorderLine;
-    bottom: TableBorderLine;
-    horizontal: string;
-    vertical: string;
-    style?: FormattingAPI;
 }
 
 export interface TableCellOverflow
@@ -78,6 +60,19 @@ export interface TableCellPadding
 {
     left?: string;
     right?: string;
+}
+
+type ParsedCellContent = string | HorizontalLayout;
+type TableBorderLine = Record<"left" | "join" | "right", string>;
+
+interface TableBorderOptions
+{
+    top: TableBorderLine;
+    middle: TableBorderLine;
+    bottom: TableBorderLine;
+    horizontal: string;
+    vertical: string;
+    style?: FormattingAPI;
 }
 
 //----------------------------------------------
@@ -126,8 +121,7 @@ export class Table<EntryType>
 
     get emptyWidth()
     {
-        return this.border.getRequiredCellSeparatorSpace(this.columns.length)
-            + this.columns.reduce((total, column) => total + column.paddingSize, 0);
+        return this.border.getRequiredCellSeparatorSpace(this.columns.length) + this.columns.reduce((total, column) => total + column.paddingSize, 0);
     }
 
     renderLines(preferredOverallTableWidth: number = -1)
@@ -188,11 +182,7 @@ export class Table<EntryType>
         return lines;
     }
 
-    private getCellContents(
-        data: Partial<EntryType>[],
-        accessor: "headerCellAccessor" | "bodyCellAccessor" | "footerCellAccessor",
-        columnWidths: number[],
-    ): ParsedCellContent[]
+    private getCellContents(data: Partial<EntryType>[], accessor: "headerCellAccessor" | "bodyCellAccessor" | "footerCellAccessor", columnWidths: number[]): ParsedCellContent[]
     {
         const cells = new Array(data.length * this.columns.length);
 
@@ -428,13 +418,7 @@ class TableColumn<EntryType>
 
 export class TableBorder
 {
-    static readonly None = new TableBorder({
-        top: { left: "", join: "", right: "" },
-        middle: { left: "", join: "", right: "" },
-        bottom: { left: "", join: "", right: "" },
-        horizontal: "",
-        vertical: "",
-    });
+    static readonly None = new TableBorder();
     static readonly Sharp = new TableBorder({
         top: { left: "┌", join: "┬", right: "┐" },
         middle: { left: "├", join: "┼", right: "┤" },
@@ -452,18 +436,18 @@ export class TableBorder
 
     readonly style: FormattingSettings;
     readonly isVisible: boolean;
-    private readonly definition: TableBorderOptions;
+    private readonly definition?: TableBorderOptions;
 
-    private constructor(options: TableBorderOptions)
+    private constructor(borderCharacters?: TableBorderOptions)
     {
-        this.definition = options;
-        this.isVisible = options.horizontal.length > 0 || options.vertical.length > 0;
-        this.style = options.style as FormattingSettings ?? FormattingSettings.None;
+        this.definition = borderCharacters;
+        this.isVisible = this.definition !== undefined;
+        this.style = borderCharacters?.style as FormattingSettings ?? FormattingSettings.None;
     }
 
     withStyle(style: FormattingAPI | undefined)
     {
-        if (!style) return this;
+        if (!style || !this.definition) return this;
 
         return new TableBorder({
             ...this.definition,
@@ -479,7 +463,7 @@ export class TableBorder
     renderCellsWithCellSeparators(cells: string[])
     {
         if (!this.isVisible) return cells.join("");
-        const verticalBorder = this.style.format(this.definition.vertical);
+        const verticalBorder = this.style.format(this.definition!.vertical);
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
     }
 
@@ -487,10 +471,10 @@ export class TableBorder
     {
         if (!this.isVisible || columns.length === 0) return undefined;
 
-        const line = this.definition[position];
+        const line = this.definition![position];
         const fragments = [line.left];
         for (const column of columns)
-            fragments.push(this.definition.horizontal.repeat(column.paddingSize + contentWidths[column.index]), line.join);
+            fragments.push(this.definition!.horizontal.repeat(column.paddingSize + contentWidths[column.index]), line.join);
 
         fragments[fragments.length - 1] = line.right;
 
