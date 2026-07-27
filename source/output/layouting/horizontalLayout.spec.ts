@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { Debug } from "unitium";
+import { Formatting, FormattingSettings } from "../formatting/formatting.ts";
 import { Flex } from "./flex.ts";
 import { HorizontalLayout } from "./horizontalLayout.ts";
 
@@ -105,6 +107,42 @@ export class HorizontalLayoutGrowthTests
 
 export class HorizontalLayoutShrinkTests
 {
+    retainsBestEffortOutputUnlessForced()
+    {
+        const layout = new HorizontalLayout([Formatting.green, "same", [Formatting.red, "same"]]);
+
+        assert.equal(
+            layout.computeString(5),
+            (Formatting.green as FormattingSettings).format("same") + (Formatting.red as FormattingSettings).format("same"),
+        );
+    }
+
+    forceTruncatesOnTheRightBeforeApplyingFormatting()
+    {
+        const layout = new HorizontalLayout([Formatting.green, "same", [Formatting.red, "same"]]);
+
+        assert.equal(
+            layout.computeString(5, { alignContent: "left" }),
+            (Formatting.green as FormattingSettings).format("same") + (Formatting.red as FormattingSettings).format("…"),
+        );
+        assert.equal(
+            layout.computeString(7, { alignContent: "left", truncator: "..." }),
+            (Formatting.green as FormattingSettings).format("same") + (Formatting.red as FormattingSettings).format("..."),
+        );
+        assert.equal(layout.computeString(2, { alignContent: "left", truncator: "..." }), (Formatting.green as FormattingSettings).format(".."));
+        assert.equal(layout.computeString(0, { alignContent: "left", truncator: "..." }), "");
+    }
+
+    forceTruncatesOnTheLeftAndPreservesRightFormatting()
+    {
+        const layout = new HorizontalLayout([Formatting.green, "same", [Formatting.red, "same"]]);
+
+        assert.equal(
+            layout.computeString(7, { alignContent: "right", truncator: "..." }),
+            (Formatting.green as FormattingSettings).format("...") + (Formatting.red as FormattingSettings).format("same"),
+        );
+    }
+
     sharesShrinkageAccordingToFlexFactor()
     {
         const layout = new HorizontalLayout([
@@ -115,6 +153,13 @@ export class HorizontalLayoutShrinkTests
         ]);
 
         assert.equal(layout.computeString(12), "abcde...k...");
+    }
+
+    usesASingleWidthEllipsisAsTheDefaultFlexTruncationMarker()
+    {
+        const layout = new HorizontalLayout(["abcdef", Flex.shrinkLeft()]);
+
+        assert.equal(layout.computeString(4), "abc…");
     }
 
     redistributesShrinkageAfterARangeReachesItsPreservationLimit()

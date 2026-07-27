@@ -1,10 +1,17 @@
 import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
-import { FlexBoundary, type FlexAPI, type GrowthContext, type ShrinkContext } from "./flex.ts";
+import { DefaultTruncationMarker, FlexBoundary, type FlexAPI, type GrowthContext, type ShrinkContext } from "./flex.ts";
 
 export type LineDefinition = LineElement[] | FormattingFrame;
 export type LineElement = string | FormattingFrame | FlexAPI;
 export type FormattingFrame = [style: FormattingAPI, ...LineElement[]];
+
+export interface ForcedWidthOptions
+{
+    alignContent: "left" | "right";
+    truncator?: string;
+    filler?: string;
+}
 
 export class HorizontalLayout
 {
@@ -26,17 +33,26 @@ export class HorizontalLayout
         return this.cumulativeStringLengths.at(-1)!;
     }
 
-    computeString(targetWidth: number): string
+    computeString(targetWidth: number, force?: ForcedWidthOptions): string
     {
-        let adjustedStrings = this.normalizedStrings;
+        if (targetWidth < 0) throw new Error("Negative length strings not possible!");
+
         const widthDifference = targetWidth - this.unformattedWidth;
 
+        let adjustmentResult;
         if (widthDifference < 0)
-            adjustedStrings = this.adjustWith(Truncation, -widthDifference);
+            adjustmentResult = this.adjustWith(Truncation, -widthDifference, force);
         else if (widthDifference > 0)
-            adjustedStrings = this.adjustWith(Extension, widthDifference);
+            adjustmentResult = this.adjustWith(Extension, widthDifference, force);
+        else
+            adjustmentResult = { difference: 0, strings: this.normalizedStrings };
 
-        return this.formatStrings(adjustedStrings);
+        if (!(force && adjustmentResult?.difference))
+            return this.formatStrings(adjustmentResult.strings);
+        else if (widthDifference < 0)
+            return this.forceTruncate(targetWidth, adjustmentResult, force);
+        else //if (widthDifference > 0)
+            return this.forceExtend(targetWidth, adjustmentResult, force);
     }
 
     private parseFormattingFrame(frame: LineDefinition, parentFormatting: FormattingSettings)
@@ -109,7 +125,7 @@ export class HorizontalLayout
         this.cumulativeStringLengths.push(this.unformattedWidth + value.length);
     }
 
-    private adjustWith(AdjustmentType: typeof Extension | typeof Truncation, difference: number): string[]
+    private adjustWith(AdjustmentType: typeof Extension | typeof Truncation, difference: number, force?: ForcedWidthOptions)
     {
         const modifiedStrings = [...this.normalizedStrings];
         const adjustmentGroups = this.discoverPossibleAdjustmentsAndGroupByPriority(AdjustmentType);
@@ -126,7 +142,7 @@ export class HorizontalLayout
             if (difference === 0) break;
         }
 
-        return modifiedStrings;
+        return { difference, strings: modifiedStrings };
     }
 
     private discoverPossibleAdjustmentsAndGroupByPriority(AdjustmentType: typeof Extension | typeof Truncation)
@@ -169,6 +185,47 @@ export class HorizontalLayout
         return this.formattingRanges
             .map(range => range.getFormattedString(adjustedStrings))
             .join("");
+    }
+
+    private forceTruncate(targetWidth: number, adjustmentResult: { difference: number; strings: string[]; }, force: ForcedWidthOptions)
+    {
+        force.truncator = force.truncator?.slice(0, targetWidth) ?? DefaultTruncationMarker.slice(0, targetWidth);
+        const truncator = force.alignContent == "left" ?
+            { index: adjustmentResult.strings.length, step: -1, truncate: (text: string, difference: number) => text.slice(0, -difference) } :
+            { index: -1, step: 1, truncate: (text: string, difference: number) => text.slice(difference) };
+
+        adjustmentResult.difference += force.truncator.length;
+
+        while (adjustmentResult.difference > 0)
+        {
+            truncator.index += truncator.step;
+            const originalString = adjustmentResult.strings[truncator.index];
+            const truncation = Math.min(adjustmentResult.difference, originalString.length);
+            const truncatedString = truncator.truncate(originalString, truncation);
+            adjustmentResult.difference -= truncation;
+
+            if (adjustmentResult.difference)
+                adjustmentResult.strings[truncator.index] = truncatedString;
+            else if (force.alignContent === "left")
+                adjustmentResult.strings[truncator.index] = truncatedString + force.truncator;
+            else
+                adjustmentResult.strings[truncator.index] = force.truncator + truncatedString;
+        }
+
+        return this.formatStrings(adjustmentResult.strings);
+    }
+
+    private forceExtend(targetWidth: number, adjustmentResult: { difference: number; strings: string[]; }, force: ForcedWidthOptions)
+    {
+        force.filler = force.filler ?? " ";
+
+        switch (force.alignContent)
+        {
+            case "left":
+                return this.formatStrings(adjustmentResult.strings) + force.filler.repeat(adjustmentResult.difference / force.filler.length) + force.filler.slice(0, adjustmentResult.difference % force.filler.length);
+            case "right":
+                return force.filler.slice(-(adjustmentResult.difference % force.filler.length)) + force.filler.repeat(adjustmentResult.difference / force.filler.length) + this.formatStrings(adjustmentResult.strings);
+        }
     }
 }
 
