@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { Debug } from "unitium";
-import { Formatting } from "../formatting/formatting.ts";
+import { Formatting, FormattingSettings } from "../formatting/formatting.ts";
+import { Flex } from "./flex.ts";
 import { Table, TableBorder, type TableColumns } from "./tables.ts";
+import { Debug } from "unitium";
 
 type FileRow =
     {
@@ -42,18 +43,35 @@ export class TableRenderingTests
 
     rereadsMutableDataAndFooterForEveryRender()
     {
+        const initialData = [{ path: "a.txt", size: 2 }];
         const table = new Table<FileRow>({
             path: { header: "File" },
             size: { header: "Bytes", cellOptions: { align: { horizontal: "right" } } },
-        }, { border: TableBorder.None });
-
-        table.bodyData.push({ path: "a.txt", size: 2 });
-        table.footerData = { path: "Total", size: 2 };
+        }, { border: TableBorder.None }, initialData, { path: "Total", size: 2 });
 
         assert.deepEqual(table.renderLines(), [
             "File Bytes",
             "a.txt    2",
             "Total    2",
+        ]);
+
+        initialData.push({ path: "outside.txt", size: 99 });
+        table.footerData = { path: "Total", size: 101 };
+
+        assert.deepEqual(table.renderLines(), [
+            "File       Bytes",
+            "a.txt          2",
+            "outside.txt   99",
+            "Total        101",
+        ]);
+
+        table.bodyData = [{ path: "b.txt", size: 3 }];
+        table.footerData = { path: "Total", size: 3 };
+
+        assert.deepEqual(table.renderLines(), [
+            "File Bytes",
+            "b.txt    3",
+            "Total    3",
         ]);
     }
 
@@ -167,6 +185,81 @@ export class TableRenderingTests
         ]);
 
         assert.throws(() => Table.Auto([]).renderLines());
+    }
+
+    honorsConfiguredContentWidthsAndEmptySchemas()
+    {
+        const renderValueAtWidth = (width: number | { minContentWidth?: number; maxContentWidth?: number; }) =>
+            new Table({ value: { cellOptions: { width } } }, { border: false }, [{ value: "abcdef" }]).renderLines();
+
+        assert.deepEqual(renderValueAtWidth(4), ["abc…"]);
+        assert.deepEqual(renderValueAtWidth(0), [""]);
+        assert.deepEqual(renderValueAtWidth({ minContentWidth: 8 }), ["abcdef  "]);
+        assert.deepEqual(renderValueAtWidth({ maxContentWidth: 4 }), ["abc…"]);
+
+        assert.deepEqual(new Table({
+            value: {
+                cellOptions: {
+                    width: 2,
+                    overflow: { truncate: "..." }
+                }
+            },
+        }, {
+            border: false
+        },
+            [{ value: "abcdef" }])
+            .renderLines(),
+            [".."]);
+        assert.deepEqual(new Table({
+            value: {
+                cellOptions: {
+                    width: 4,
+                    padding: " ",
+                    overflow: { truncate: "" }
+                }
+            },
+        },
+            {},
+            [{ value: "abcdef" }])
+            .renderLines(8),
+            [
+                "┌──────┐",
+                "│ abcd │",
+                "└──────┘",
+            ]);
+
+        assert.deepEqual(new Table({}).renderLines(), []);
+    }
+
+    preservesFormattingWhileSizingCustomCells()
+    {
+        const table = new Table({
+            value: {
+                cellOptions: {
+                    width: 6,
+                    cell: () => [Formatting.green, "ok", Flex.grow(" ")],
+                },
+            },
+        }, { border: false }, [{ value: "unused" }]);
+
+        assert.deepEqual(table.renderLines(), [(Formatting.green as FormattingSettings).format("ok    ")]);
+    }
+
+    forceTruncatesCustomCellsAccordingToHorizontalAlignment()
+    {
+        const createTable = (alignment: "left" | "right", truncator?: string) => new Table({
+            value: {
+                cellOptions: {
+                    width: { maxContentWidth: 3 },
+                    align: { horizontal: alignment },
+                    overflow: truncator === undefined ? undefined : { truncate: truncator },
+                    cell: () => [Formatting.green, "abcdef"],
+                },
+            },
+        }, { border: false }, [{ value: "unused" }]);
+
+        assert.deepEqual(createTable("left").renderLines(3), [(Formatting.green as FormattingSettings).format("ab…")]);
+        assert.deepEqual(createTable("right", ".").renderLines(3), [(Formatting.green as FormattingSettings).format(".ef")]);
     }
 
     rejectsInvalidTableDimensions()
