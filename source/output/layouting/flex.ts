@@ -7,11 +7,12 @@ export interface FlexAPI
 
 export type Truncator = string | TruncationHandler;
 export type TruncationHandler = (fragments: string[], shrinkLength: number) => string[];
+export const DefaultTruncationMarker = "…";
 
 export interface FlexShrinkConfiguration
 {
     /**
-     * A truncator like "..." or (string[], lenghtToShrink) => strings.map...
+     * A truncator like "…" or (string[], lenghtToShrink) => strings.map...
      * 
      * A custom truncator must work with string fragments as strings may be split by fromatting boundaries.
      * Because it is imperative to know which part of the formatted string belongs to which formatting the truncator
@@ -26,7 +27,7 @@ export interface FlexShrinkConfiguration
      *
      * If you supply a custom truncator, this informs about the max truncation
      * capacity of the truncator. If a truncator leaves at leaset 3 letters and
-     * adds "...", preserve should be set to 6.
+     * adds "…", preserve should be set to 4.
      */
     readonly preserve?: number;
 
@@ -70,7 +71,7 @@ export interface FlexGrowConfiguration
 
 export class FlexBoundary implements FlexAPI
 {
-    static shrinkLeft(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...")
+    static shrinkLeft(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
         return new FlexBoundary().shrinkLeft(truncatorOrConfig);
     }
@@ -80,7 +81,7 @@ export class FlexBoundary implements FlexAPI
         return new FlexBoundary().grow(growElementOrConfig);
     }
 
-    static shrinkRight(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...")
+    static shrinkRight(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
         return new FlexBoundary().shrinkRight(truncatorOrConfig);
     }
@@ -89,7 +90,7 @@ export class FlexBoundary implements FlexAPI
     growthContext?: GrowthContext;
     shrinkRightContext?: ShrinkContext;
 
-    shrinkLeft(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...")
+    shrinkLeft(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
         this.shrinkLeftContext = new ShrinkContext(truncatorOrConfig, "left");
 
@@ -103,7 +104,7 @@ export class FlexBoundary implements FlexAPI
         return this;
     }
 
-    shrinkRight(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...")
+    shrinkRight(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
         this.shrinkRightContext = new ShrinkContext(truncatorOrConfig, "right");
 
@@ -121,7 +122,7 @@ export class ShrinkContext implements FlexShrinkConfiguration
     flexFactor = 1;
     direction: "left" | "right";
 
-    constructor(truncatorOrConfig: FlexShrinkConfiguration | Truncator = "...", direction: "left" | "right" = "left")
+    constructor(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker, direction: "left" | "right" = "left")
     {
         this.direction = direction;
 
