@@ -262,6 +262,19 @@ export class TableRenderingTests
         assert.deepEqual(createTable("right", ".").renderLines(3), [(Formatting.green as FormattingSettings).format(".ef")]);
     }
 
+    measuresAndTruncatesPlainUnicodeCellsByVisibleWidth()
+    {
+        const naturallySized = new Table({ value: {} }, { border: false }, [{ value: "👩‍💻" }, { value: "ab" }]);
+        assert.deepEqual(naturallySized.renderLines(), ["👩‍💻", "ab"]);
+
+        const renderAtWidthThree = (horizontal: "left" | "right") => new Table({
+            value: { cellOptions: { width: 3, align: { horizontal } } },
+        }, { border: false }, [{ value: "a😀b" }]).renderLines();
+
+        assert.deepEqual(renderAtWidthThree("left"), ["a …"]);
+        assert.deepEqual(renderAtWidthThree("right"), ["… b"]);
+    }
+
     rejectsInvalidTableDimensions()
     {
         assert.throws(() => new Table({ value: { cellOptions: { width: -1 } } }), RangeError);

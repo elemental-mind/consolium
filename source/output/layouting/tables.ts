@@ -1,5 +1,6 @@
 import { distributeIntegerCapped } from "apportionium";
 import { FormattingSettings, type FormattingAPI } from "../formatting/formatting.ts";
+import { extendTextArrayEnd, extendTextArrayStart, textWidth, truncateStringsEnd, truncateStringsStart, truncateTextEnd, truncateTextStart } from "../formatting/textSize.ts";
 import { DefaultTruncationMarker } from "./flex.ts";
 import { HorizontalLayout, type LineDefinition, type LineElement } from "./horizontalLayout.ts";
 
@@ -169,7 +170,7 @@ export class Table<EntryType>
                 {
                     const content = String(rawCellContent ?? "");
                     cells[cellIndex] = content;
-                    columnWidths[columnIndex] = Math.max(columnWidths[columnIndex], content.length);
+                    columnWidths[columnIndex] = Math.max(columnWidths[columnIndex], textWidth(content));
                 }
 
                 cellIndex++;
@@ -431,17 +432,19 @@ class TableRenderer
         if (typeof cell === "string")
         {
             content = cell;
+            let contentSize = textWidth(content);
 
-            if (content.length > width)
+            if (contentSize > width)
             {
-                const retainedWidth = width - truncator.length;
+                const visibleTruncator = truncateTextEnd(truncator, textWidth(truncator), width);
+                const retainedContentWidth = width - textWidth(visibleTruncator);
                 content = alignment === "right"
-                    ? truncator + (retainedWidth ? content.slice(-retainedWidth) : "")
-                    : content.slice(0, retainedWidth) + truncator;
+                    ? truncateTextStart(content, contentSize, retainedContentWidth, visibleTruncator)
+                    : truncateTextEnd(content, contentSize, retainedContentWidth, visibleTruncator);
             }
-            else if (content.length < width)
+            else if (contentSize < width)
             {
-                const remainingWidth = width - content.length;
+                const remainingWidth = width - contentSize;
                 if (alignment === "right")
                     content = " ".repeat(remainingWidth) + content;
                 else if (alignment === "center")
@@ -454,10 +457,14 @@ class TableRenderer
             }
         }
         else if (cell instanceof HorizontalLayout)
-            content = cell.computeString(width, { alignContent: alignment === "right" ? "right" : "left", truncator });
+        {
+            if (alignment === "right")
+                content = cell.computeString(width, { truncate: truncateStringsStart, fill: extendTextArrayStart, truncator });
+            else
+                content = cell.computeString(width, { truncate: truncateStringsEnd, fill: extendTextArrayEnd, truncator });
+        }
         else
             throw new Error("Could not recognize parsed cell format!");
-
 
         return padding.left + content + padding.right;
     }

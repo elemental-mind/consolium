@@ -1,3 +1,5 @@
+import { extendTextArrayEnd, truncateStringsEnd, truncateStringsStart } from "../formatting/textSize.ts";
+
 export interface FlexAPI
 {
     shrinkLeft(truncatorOrConfig?: FlexShrinkConfiguration | Truncator): FlexAPI;
@@ -92,7 +94,8 @@ export class FlexBoundary implements FlexAPI
 
     shrinkLeft(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
-        this.shrinkLeftContext = new ShrinkContext(truncatorOrConfig, "left");
+        //When we shrink left of a boundary, it means we shrink the end of the string in the previous section
+        this.shrinkLeftContext = new ShrinkContext(truncatorOrConfig, truncateStringsEnd);
 
         return this;
     }
@@ -106,7 +109,8 @@ export class FlexBoundary implements FlexAPI
 
     shrinkRight(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker)
     {
-        this.shrinkRightContext = new ShrinkContext(truncatorOrConfig, "right");
+        //When we shrink right of a boundary, it means we shrink the start of the string in the following section
+        this.shrinkRightContext = new ShrinkContext(truncatorOrConfig, truncateStringsStart);
 
         return this;
     }
@@ -116,15 +120,15 @@ export const Flex = FlexBoundary as FlexAPI;
 
 export class ShrinkContext implements FlexShrinkConfiguration
 {
-    truncator!: Truncator;
     preserve = 3;
     contentImportance = 0;
     flexFactor = 1;
-    direction: "left" | "right";
+    truncator!: Truncator;
+    truncationStrategy: typeof truncateStringsEnd;
 
-    constructor(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker, direction: "left" | "right" = "left")
+    constructor(truncatorOrConfig: FlexShrinkConfiguration | Truncator = DefaultTruncationMarker, truncationStrategy = truncateStringsEnd)
     {
-        this.direction = direction;
+        this.truncationStrategy = truncationStrategy;
 
         if (typeof truncatorOrConfig === "object")
             Object.assign(this, truncatorOrConfig);
@@ -135,58 +139,25 @@ export class ShrinkContext implements FlexShrinkConfiguration
             throw new RangeError("The truncator cannot be longer than the preserved content.");
     }
 
-    shrink(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
+    shrink(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, currentWidth: number, shrinkBy: number)
     {
         if (startIndexInclusive === endIndexExclusive) return;
 
         if (typeof this.truncator === "string")
-            this.useDefaultTruncator(truncationTarget, startIndexInclusive, endIndexExclusive, shrinkBy);
+            this.useDefaultTruncator(truncationTarget, startIndexInclusive, endIndexExclusive, currentWidth, shrinkBy);
         else
             this.useCustomTruncator(truncationTarget, startIndexInclusive, endIndexExclusive, shrinkBy);
 
         return truncationTarget;
     }
 
-    private useDefaultTruncator(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
+    private useDefaultTruncator(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, currentWidth: number, shrinkBy: number)
     {
-        const truncator = this.truncator as string;
+        const fragments = truncationTarget.slice(startIndexInclusive, endIndexExclusive);
+        const truncatedFragments = this.truncationStrategy(fragments, currentWidth, currentWidth - shrinkBy, this.truncator as string);
 
-        // The truncator is added again, so remove enough input to make room for it.
-        let truncationLength = shrinkBy + truncator.length;
-        const [start, end, step] = this.direction === "left"
-            ? [endIndexExclusive - 1, startIndexInclusive - 1, -1]
-            : [startIndexInclusive, endIndexExclusive, 1];
-
-        for (let index = start; index !== end; index += step)
-        {
-            const chunk = truncationTarget[index];
-
-            if (chunk.length === 0)
-                continue;
-
-            if (chunk.length < truncationLength)
-            {
-                truncationLength -= chunk.length;
-                truncationTarget[index] = "";
-                continue;
-            }
-
-            if (chunk.length === truncationLength)
-            {
-                truncationTarget[index] = truncator;
-                return;
-            }
-
-            if (chunk.length > truncationLength)
-            {
-                if (this.direction === "left")
-                    truncationTarget[index] = chunk.slice(0, -truncationLength) + truncator;
-                else
-                    truncationTarget[index] = truncator + chunk.slice(truncationLength);
-
-                return;
-            }
-        }
+        for (let index = 0; index < truncatedFragments.length; index++)
+            truncationTarget[startIndexInclusive + index] = truncatedFragments[index];
     }
 
     private useCustomTruncator(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, shrinkBy: number)
@@ -224,9 +195,6 @@ export class GrowthContext implements FlexGrowConfiguration
         if (typeof this.filler === "function")
             return this.filler(length);
 
-        if (length === 0)
-            return "";
-
-        return this.filler.repeat(Math.ceil(length / this.filler.length)).slice(0, length);
+        return extendTextArrayEnd([""], 0, length, this.filler)[0];
     }
 }

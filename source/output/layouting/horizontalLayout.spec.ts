@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { Debug } from "unitium";
 import { Formatting, FormattingSettings } from "../formatting/formatting.ts";
+import { extendTextArrayEnd, extendTextArrayStart, truncateStringsEnd, truncateStringsStart } from "../formatting/textSize.ts";
 import { Flex } from "./flex.ts";
 import { HorizontalLayout } from "./horizontalLayout.ts";
 
@@ -103,6 +103,16 @@ export class HorizontalLayoutGrowthTests
         assert.equal(layout.computeString(10), "left right");
         assert.equal(layout.computeString(11), "left  right");
     }
+
+    forceExtendsWithDirectionalFillersOutsideFormatting()
+    {
+        const layout = new HorizontalLayout([Formatting.green, "same"]);
+        const formattedText = (Formatting.green as FormattingSettings).format("same");
+
+        assert.equal(layout.computeString(7, { truncate: truncateStringsEnd, fill: extendTextArrayEnd, filler: ".-" }), formattedText + ".-.");
+        assert.equal(layout.computeString(7, { truncate: truncateStringsStart, fill: extendTextArrayStart, filler: ".-" }), "-.-" + formattedText);
+        assert.equal(layout.computeString(6, { truncate: truncateStringsStart, fill: extendTextArrayStart, filler: ".-" }), ".-" + formattedText);
+    }
 }
 
 export class HorizontalLayoutShrinkTests
@@ -122,15 +132,15 @@ export class HorizontalLayoutShrinkTests
         const layout = new HorizontalLayout([Formatting.green, "same", [Formatting.red, "same"]]);
 
         assert.equal(
-            layout.computeString(5, { alignContent: "left" }),
+            layout.computeString(5, { truncate: truncateStringsEnd, fill: extendTextArrayEnd }),
             (Formatting.green as FormattingSettings).format("same") + (Formatting.red as FormattingSettings).format("…"),
         );
         assert.equal(
-            layout.computeString(7, { alignContent: "left", truncator: "..." }),
+            layout.computeString(7, { truncate: truncateStringsEnd, fill: extendTextArrayEnd, truncator: "..." }),
             (Formatting.green as FormattingSettings).format("same") + (Formatting.red as FormattingSettings).format("..."),
         );
-        assert.equal(layout.computeString(2, { alignContent: "left", truncator: "..." }), (Formatting.green as FormattingSettings).format(".."));
-        assert.equal(layout.computeString(0, { alignContent: "left", truncator: "..." }), "");
+        assert.equal(layout.computeString(2, { truncate: truncateStringsEnd, fill: extendTextArrayEnd, truncator: "..." }), (Formatting.green as FormattingSettings).format(".."));
+        assert.equal(layout.computeString(0, { truncate: truncateStringsEnd, fill: extendTextArrayEnd, truncator: "..." }), "");
     }
 
     forceTruncatesOnTheLeftAndPreservesRightFormatting()
@@ -138,7 +148,7 @@ export class HorizontalLayoutShrinkTests
         const layout = new HorizontalLayout([Formatting.green, "same", [Formatting.red, "same"]]);
 
         assert.equal(
-            layout.computeString(7, { alignContent: "right", truncator: "..." }),
+            layout.computeString(7, { truncate: truncateStringsStart, fill: extendTextArrayStart, truncator: "..." }),
             (Formatting.green as FormattingSettings).format("...") + (Formatting.red as FormattingSettings).format("same"),
         );
     }
@@ -184,5 +194,23 @@ export class HorizontalLayoutShrinkTests
         ]);
 
         assert.equal(layout.computeString(15), "abcde...klmn...");
+    }
+
+    measuresAndTruncatesVisibleColumnsWithoutSplittingGraphemes()
+    {
+        const layout = new HorizontalLayout(["a😀b"]);
+
+        assert.equal(layout.unformattedWidth, 4);
+        assert.equal(layout.computeString(3, { truncate: truncateStringsEnd, fill: extendTextArrayEnd }), "a …");
+        assert.equal(layout.computeString(3, { truncate: truncateStringsStart, fill: extendTextArrayStart }), "… b");
+    }
+
+    flexTruncationKeepsItsExactWidthAtWideGraphemeBoundaries()
+    {
+        const truncateRight = new HorizontalLayout(["a😀b", Flex.shrinkLeft()]);
+        const truncateLeft = new HorizontalLayout([Flex.shrinkRight(), "a😀b"]);
+
+        assert.equal(truncateRight.computeString(3), "a …");
+        assert.equal(truncateLeft.computeString(3), "… b");
     }
 }
