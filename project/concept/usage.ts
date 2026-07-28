@@ -1,9 +1,9 @@
 //@ts-nocheck
-//Concept scartchpad. File does not need to work.
+// Concept sketch. This file combines the proposed input, formatting, and terminal APIs and does not need to compile yet.
 
-import { TerminalEventStream } from "../../source/terminalium.ts";
+import { blue, Flex, gray, green, Terminal, TerminalEventStream, type TerminalLine } from "../../source/consolium.ts";
 
-//Inputs
+// Inputs
 
 async function useInputs()
 {
@@ -13,56 +13,50 @@ async function useInputs()
     {
         if (event.type === "keypress")
             input += event.key;
-
         if (event.type === "wheel")
             scrollPosition += event.deltaY;
     }
 }
 
-//Outputs
+// Outputs
 
-function useOutputs()
+async function useOutputs()
 {
-    const terminal = new TerminalRenderer();
-    terminal.openAlternativeScreen();
+    const terminal = new Terminal();
 
-    while (!files.copyCompleted && await Promise.race(timeout(100), files.copyEnd))
+    if (!terminal.isInteractive)
     {
-        if (copyFileSync.copyCompleted)
-            break;
-
-        header = [];
-        content = [];
-        footer = [];
-
-        header.push("Copying files...");
-
-        for (const file of files)
-        {
-            if (file.copied)
-                content.push(leftAligned.truncatable(file.name, { text: "green" }));
-            else if (file.pending)
-                content.push(leftAligned.truncatable(file.name, { text: "#595959", background: "white" }));
-            else
-                content.push(
-                    leftAligned
-                        .truncatable(file.name, { text: "white", background: "#000000" })
-                        .rightAligned(`[${"=".repeat(file.progress / 10)}${"-".repeat((100 - file.progress) / 10)}]`)
-                );
-        }
-
-        footer.push("Overall progress:");
-        footer.push("=".repeat(files.progress * terminal.width / 100));
-
-        terminal.renderFrame(
-            header,     //Fixed to top
-            content,    //scrollable
-            footer      //Fixed to bottom
-        );
+        terminal.writeLine("Copying files...");
+        await files.copyEnd;
+        terminal.writeLine("All files copied");
+        return;
     }
 
-    terminal.clearFrame();
-    terminal.closeAlternativeScreen();
+    const render = () =>
+    {
+        const header: TerminalLine[] = [[blue.bold, "Copying files..."]];
+        const content: TerminalLine[] = files.map(file =>
+        {
+            const state = file.copied ? green.bold`complete` : file.pending ? gray`pending` : progressBar(file.progress);
+            return [[file.copied ? green : gray, file.name], Flex.shrinkLeft({ truncator: "...", preserve: 10 }).grow(" "), state];
+        });
+        const footer: TerminalLine[] = [[gray, "Overall progress"], Flex.grow(" "), progressBar(files.progress)];
 
-    terminal.writeLine("All files copied");
+        terminal.writeFrame({ header, content, footer });
+    };
+
+    using screen = terminal.alternateScreen({ hideCursor: true });
+    using renderLoop = setInterval(render, 100);
+    using resizer = terminal.onResize(render);
+
+    render();
+    await files.copyEnd;
+
+    terminal.writeLine(green.bold`All files copied`);
+}
+
+function progressBar(progress: number): TerminalLine
+{
+    const completed = Math.round(progress / 10);
+    return ["[", [green, "=".repeat(completed)], [gray, "-".repeat(10 - completed)], `] ${progress}%`];
 }

@@ -26,6 +26,7 @@
   "scripts": {
     "check": "tsc --noemit",
     "test": "unitium-tsx ./source",
+    "visual": "node test/visual/formatting.ts",
     "build:npm": "node project/scripts/build-npm-package.ts",
     "build:jsr": "node project/scripts/build-jsr-package.ts",
     "publish:npm": "git push --follow-tags && node project/scripts/build-npm-package.ts && npm publish",
@@ -38,5 +39,8 @@
   "devDependencies": {
     "@types/node": "^22.18.0",
     "unitium": "^0.8.6"
+  },
+  "dependencies": {
+    "apportionium": "^1.0.1"
   }
 }
