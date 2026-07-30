@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Formatting } from "./output/formatting/formatting.ts";
 import { Flex } from "./output/layouting/flex.ts";
+import { VerticalLayout } from "./output/layouting/verticalLayout.ts";
 import { CSIEvent, SS3Event, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./input/events.ts";
 import type { TerminalInputEvent } from "./input/events.ts";
 import { Terminal, type TerminalInputEventSource } from "./terminal.ts";
@@ -18,6 +19,7 @@ class FakeOutput extends EventEmitter
         this.written += value;
         return true;
     }
+
 }
 
 class FakeInput implements TerminalInputEventSource
@@ -54,6 +56,19 @@ class FakeInput implements TerminalInputEventSource
 
 export class TerminalTests
 {
+    writesAnArrayAsAContentOnlyFrame()
+    {
+        const output = new FakeOutput();
+        output.isTTY = true;
+        output.columns = 10;
+        output.rows = 3;
+        const terminal = new Terminal({ output });
+
+        terminal.writeFrame(["one", "two"]);
+
+        assert.equal(output.written, "one\ntwo\n");
+    }
+
     extendsEventEmitterAndReEmitsDecodedInputEvents()
     {
         const input = new FakeInput([
@@ -140,7 +155,7 @@ export class TerminalTests
         const terminal = new Terminal({ output: new FakeOutput() });
 
         assert.throws(() => terminal.clearViewport(), /interactive TTY/);
-        assert.throws(() => terminal.writeFrame({ content: [] }), /interactive TTY/);
+        assert.throws(() => terminal.writeFrame([]), /interactive TTY/);
         assert.throws(() => terminal.alternateScreen(), /interactive TTY/);
     }
 
@@ -177,7 +192,7 @@ export class TerminalTests
         const terminal = new Terminal({ output });
 
         terminal.writeLine("before");
-        terminal.writeFrame({ header: ["head"], content: ["one", "two", "three"], footer: ["foot"] });
+        terminal.writeFrame(new VerticalLayout(["one", "two", "three"], { header: ["head"], footer: ["foot"] }));
         terminal.clearFrame();
 
         assert.equal(output.written, "before\nhead\none\ntwo\nfoot\r\u001B[3A\u001B[J");
@@ -191,7 +206,7 @@ export class TerminalTests
         output.rows = 4;
         const terminal = new Terminal({ output });
 
-        terminal.writeFrame({ header: ["header"], content: ["body"], footer: ["foot"] });
+        terminal.writeFrame(new VerticalLayout(["body"], { header: ["header"], footer: ["foot"] }));
 
         assert.equal(output.written, "hea…\nbody\n\nfoot");
     }

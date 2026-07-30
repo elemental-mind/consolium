@@ -4,21 +4,13 @@ import { TerminalEventStream } from "./input/eventStream.ts";
 import type { CSIEvent, SS3Event, TerminalInputEvent, TerminalKeyboardEvent, TerminalMouseEvent, TerminalWheelEvent } from "./input/events.ts";
 import { extendTextArrayEnd, truncateStringsEnd } from "./output/formatting/textSize.ts";
 import { HorizontalLayout, type LineDefinition } from "./output/layouting/horizontalLayout.ts";
+import { VerticalLayout, type TerminalLine } from "./output/layouting/verticalLayout.ts";
 
-/** A single, structured line understood by the output layout engine. */
-export type TerminalLine = string | LineDefinition;
 
 export interface TerminalSize
 {
     readonly width: number;
     readonly height: number;
-}
-
-export interface TerminalFrame
-{
-    readonly header?: readonly TerminalLine[];
-    readonly content: readonly TerminalLine[];
-    readonly footer?: readonly TerminalLine[];
 }
 
 export interface TerminalOptions
@@ -193,20 +185,20 @@ export class Terminal extends EventEmitter
         };
     }
 
-    writeFrame(frame: TerminalFrame): void
+    writeFrame(frame: readonly TerminalLine[] | VerticalLayout): void
     {
         this.requireInteractive("writeFrame");
         this.clearFrame();
 
-        const header = frame.header ?? [];
-        const footer = frame.footer ?? [];
-        const availableContentHeight = Math.max(0, this.height - header.length - footer.length);
-        const content = frame.content.slice(0, availableContentHeight);
-        const footerSpacing = Math.max(0, availableContentHeight - content.length);
-        const lines = [...header, ...content, ...Array<string>(footerSpacing).fill(""), ...footer].slice(0, this.height);
+        const layout = frame instanceof VerticalLayout ? frame : new VerticalLayout(frame);
+        const lines = layout.computeLines(this.height);
 
         const renderedFrame = lines
-            .map(line => this.renderLineToWidth(line))
+            .map(line =>
+            {
+                this.assertLineHasNoNewline(line);
+                return this.renderLineToWidth(line);
+            })
             .join("\n");
         this.output.write(renderedFrame);
 
