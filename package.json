@@ -12,6 +12,14 @@
     ".": {
       "types": "./distribution/npm/consolium.d.ts",
       "import": "./distribution/npm/consolium.js"
+    },
+    "./input": {
+      "types": "./distribution/npm/input/api.d.ts",
+      "import": "./distribution/npm/input/api.js"
+    },
+    "./output": {
+      "types": "./distribution/npm/output/api.d.ts",
+      "import": "./distribution/npm/output/api.js"
     }
   },
   "author": "Magnus Meseck",
