@@ -1,3 +1,10 @@
+/**
+ * Provides the {@link Terminal} abstraction for terminal output, sizing,
+ * alternate-screen handling, frame rendering, and decoded input events.
+ *
+ * @module
+ */
+
 import { EventEmitter } from "node:events";
 import type { TerminalStream } from "./input/api.ts";
 import { TerminalEventStream } from "./input/eventStream.ts";

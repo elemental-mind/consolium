@@ -1,3 +1,10 @@
+/**
+ * Provides terminal output formatting, responsive horizontal and vertical
+ * layouts, flexible sizing, and table rendering.
+ *
+ * @module
+ */
+
 export { Formatting } from "./formatting/formatting.ts";
 
 export { type LineDefinition, HorizontalLayout } from "./layouting/horizontalLayout.ts";

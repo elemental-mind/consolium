@@ -1,3 +1,10 @@
+/**
+ * Provides convenient ANSI colour and text-style functions, including
+ * foreground and background colours and composable formatting helpers.
+ *
+ * @module
+ */
+
 import { Formatting } from "./output/formatting/formatting.ts";
 
 export { Formatting } from "./output/formatting/formatting.ts";

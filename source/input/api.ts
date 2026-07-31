@@ -1,3 +1,10 @@
+/**
+ * Provides raw and decoded terminal input streams together with keyboard,
+ * mouse, wheel, CSI, and SS3 event types and modifier mappings.
+ *
+ * @module
+ */
+
 export { TerminalEventStream } from "./eventStream.ts";
 export { TerminalInputStream } from "./rawStream.ts";
 
