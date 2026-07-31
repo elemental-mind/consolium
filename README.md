@@ -55,14 +55,14 @@ console.log(files.renderLines().join("\n"));
 
 ## In a glance
 
-- Import exactly what you need: `consolium/input`, `consolium/output`, or the
-  fully integrated `consolium` exposing a convenient `Terminal` class.
-- Decode terminal keyboard, mouse, wheel, CSI, and SS3 sequences into
-  browser-like event objects.
-- Format and lay out content to the current terminal width; render viewport
-  frames to its height.
-- Use ordinary output for pipes and files, while TTY-only features such as
-  alternate screens and resize handling stay explicit.
+- Import exactly what you need:
+  - `consolium/input`: Decode terminal keyboard, mouse, wheel, CSI, and SS3
+    sequences into browser-like event objects.
+  - `consolium/output`: Format and lay out content to the current terminal
+    width; render viewport frames to its height or produce tables.
+  - `consolium/formatting`: Style and colour text and output.
+  - `consolium` exposing a convenient `Terminal` class giving you the full
+    simplified Consolium szrface
 
 # Usage
 
@@ -441,30 +441,30 @@ interactive TTY; redirected output and most test runners are not interactive.
 import { Terminal } from "consolium";
 
 const terminal = new Terminal({
-    color: "auto",
-    fallbackSize: { width: 80, height: 24 },
+  color: "auto",
+  fallbackSize: { width: 80, height: 24 },
 });
 ```
 
 `options` is a `TerminalOptions` object:
 
-| Property | Type | Default | Description |
-| --- | --- | --- | --- |
-| `output` | `TerminalOutput` | `process.stdout` | Destination used for output, dimensions, TTY detection, and resize events. |
-| `input` | `TerminalInputEventSource` | A new `TerminalEventStream` | Decoded event source used by `startInput()`. Useful for adapters and tests. |
-| `color` | `"auto" \| "always" \| "never"` | `"auto"` | In `auto` mode ANSI formatting is retained only for a TTY output. |
-| `fallbackSize` | `TerminalSize` | `{ width: 80, height: 24 }` | Dimensions used when the output does not expose positive integer `columns` and `rows`. |
+| Property       | Type                            | Default                     | Description                                                                            |
+| -------------- | ------------------------------- | --------------------------- | -------------------------------------------------------------------------------------- |
+| `output`       | `TerminalOutput`                | `process.stdout`            | Destination used for output, dimensions, TTY detection, and resize events.             |
+| `input`        | `TerminalInputEventSource`      | A new `TerminalEventStream` | Decoded event source used by `startInput()`. Useful for adapters and tests.            |
+| `color`        | `"auto" \| "always" \| "never"` | `"auto"`                    | In `auto` mode ANSI formatting is retained only for a TTY output.                      |
+| `fallbackSize` | `TerminalSize`                  | `{ width: 80, height: 24 }` | Dimensions used when the output does not expose positive integer `columns` and `rows`. |
 
 `fallbackSize.width` and `fallbackSize.height` must be positive integers.
 
 #### Properties
 
-| Property | Type | Description |
-| --- | --- | --- |
-| `width` | `number` | Current output width, or the configured fallback width. |
-| `height` | `number` | Current output height, or the configured fallback height. |
-| `isInteractive` | `boolean` | `true` when `output.isTTY === true`. |
-| `isInputActive` | `boolean` | Whether decoded input is currently being forwarded. |
+| Property        | Type      | Description                                               |
+| --------------- | --------- | --------------------------------------------------------- |
+| `width`         | `number`  | Current output width, or the configured fallback width.   |
+| `height`        | `number`  | Current output height, or the configured fallback height. |
+| `isInteractive` | `boolean` | `true` when `output.isTTY === true`.                      |
+| `isInputActive` | `boolean` | Whether decoded input is currently being forwarded.       |
 
 #### `write(line)` and `writeLine(line)`
 
@@ -493,28 +493,29 @@ import { Terminal } from "consolium";
 
 const terminal = new Terminal();
 
-terminal.on("keyPress", event => {
-    if (event.ctrlKey && event.key === "c")
-        void terminal.stopInput();
+terminal.on("keyPress", (event) => {
+  if (event.ctrlKey && event.key === "c") {
+    void terminal.stopInput();
+  }
 });
 
-terminal.on("mouseDown", event => {
-    terminal.writeLine(`button ${event.button} at ${event.column},${event.row}`);
+terminal.on("mouseDown", (event) => {
+  terminal.writeLine(`button ${event.button} at ${event.column},${event.row}`);
 });
 ```
 
 `on(event, listener)` uses the normal Node `EventEmitter` API. The typed event
 names and payloads are:
 
-| Event name | Payload |
-| --- | --- |
-| `keyPress` | `TerminalKeyboardEvent` |
+| Event name  | Payload                           |
+| ----------- | --------------------------------- |
+| `keyPress`  | `TerminalKeyboardEvent`           |
 | `mouseDown` | `TerminalMouseEvent<"mousedown">` |
-| `mouseUp` | `TerminalMouseEvent<"mouseup">` |
+| `mouseUp`   | `TerminalMouseEvent<"mouseup">`   |
 | `mouseMove` | `TerminalMouseEvent<"mousemove">` |
-| `wheel` | `TerminalWheelEvent` |
-| `csi` | `CSIEvent` |
-| `ss3` | `SS3Event` |
+| `wheel`     | `TerminalWheelEvent`              |
+| `csi`       | `CSIEvent`                        |
+| `ss3`       | `SS3Event`                        |
 
 Adding a listener for any event in this table automatically calls
 `startInput()`. `startInput(): this` is idempotent, opens the input source, and
@@ -532,27 +533,27 @@ const terminal = new Terminal();
 const screen = terminal.alternateScreen({ hideCursor: true });
 
 try {
-    const layout = new VerticalLayout(["First row", "Second row"], {
-        header: [[Formatting.bold, "Consolium"]],
-        footer: ["Press Ctrl+C to exit"],
-    });
+  const layout = new VerticalLayout(["First row", "Second row"], {
+    header: [[Formatting.bold, "Consolium"]],
+    footer: ["Press Ctrl+C to exit"],
+  });
 
-    terminal.writeFrame(layout);
+  terminal.writeFrame(layout);
 } finally {
-    screen[Symbol.dispose]();
+  screen[Symbol.dispose]();
 }
 ```
 
-| Method | Parameters and behavior |
-| --- | --- |
-| `writeFrame(frame): void` | `frame` is `readonly TerminalLine[] \| VerticalLayout`. Clears the previous frame, selects exactly the visible lines for `height`, renders every line to `width`, and remembers the rendered height for the next update. |
-| `clearFrame(): void` | Clears the area occupied by the last frame. It does nothing before a frame has been written. |
-| `clearViewport(): void` | Clears the terminal viewport, moves the cursor home, and resets frame tracking. |
-| `alternateScreen(options?): Disposable` | Enters the alternate screen. `hideCursor?: boolean` also hides the cursor. Disposing restores the cursor and primary screen; disposal is idempotent. |
-| `onResize(listener): Disposable` | Calls `listener({ width, height })` on output resize events. Dispose the returned object to unsubscribe. |
+| Method                                  | Parameters and behavior                                                                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `writeFrame(frame): void`               | `frame` is `readonly TerminalLine[] \| VerticalLayout`. Clears the previous frame, selects exactly the visible lines for `height`, renders every line to `width`, and remembers the rendered height for the next update. |
+| `clearFrame(): void`                    | Clears the area occupied by the last frame. It does nothing before a frame has been written.                                                                                                                             |
+| `clearViewport(): void`                 | Clears the terminal viewport, moves the cursor home, and resets frame tracking.                                                                                                                                          |
+| `alternateScreen(options?): Disposable` | Enters the alternate screen. `hideCursor?: boolean` also hides the cursor. Disposing restores the cursor and primary screen; disposal is idempotent.                                                                     |
+| `onResize(listener): Disposable`        | Calls `listener({ width, height })` on output resize events. Dispose the returned object to unsubscribe.                                                                                                                 |
 
-These methods require `isInteractive === true` (except a no-op
-`clearFrame()`). `onResize()` additionally requires the output to implement
+These methods require `isInteractive === true` (except a no-op `clearFrame()`).
+`onResize()` additionally requires the output to implement
 `on("resize", listener)`.
 
 `Disposable` has one method, `[Symbol.dispose](): void`, so modern TypeScript
@@ -569,9 +570,9 @@ Both input streams implement this lifecycle:
 
 ```ts
 interface TerminalStream<T> extends AsyncIterable<T> {
-    readonly isOpen: boolean;
-    open(): this;
-    close(): Promise<void>;
+  readonly isOpen: boolean;
+  open(): this;
+  close(): Promise<void>;
 }
 ```
 
@@ -591,15 +592,17 @@ import { TerminalEventStream } from "consolium/input";
 const events = new TerminalEventStream().open();
 
 try {
-    for await (const event of events) {
-        if (event.type === "keypress")
-            console.log(event.key, event.ctrlKey);
-
-        if (event.type === "keypress" && event.key === "Escape")
-            break;
+  for await (const event of events) {
+    if (event.type === "keypress") {
+      console.log(event.key, event.ctrlKey);
     }
+
+    if (event.type === "keypress" && event.key === "Escape") {
+      break;
+    }
+  }
 } finally {
-    await events.close();
+  await events.close();
 }
 ```
 
@@ -621,10 +624,10 @@ import { TerminalInputStream } from "consolium/input";
 const input = new TerminalInputStream().open();
 
 try {
-    const next = await input.peek(); // does not consume the character
-    const same = await input.read(); // consumes it
+  const next = await input.peek(); // does not consume the character
+  const same = await input.read(); // consumes it
 } finally {
-    await input.close();
+  await input.close();
 }
 ```
 
@@ -640,13 +643,13 @@ try {
 
 Every event has `altKey`, `ctrlKey`, and `shiftKey` booleans.
 
-| Event | Important properties |
-| --- | --- |
-| `TerminalKeyboardEvent` | `type: "keypress"`, `key: string` |
-| `TerminalMouseEvent` | `type`, `button`, `buttons`, zero-based `column` and `row`, plus `leftMouseButton`, `middleMouseButton`, and `rightMouseButton` convenience booleans |
-| `TerminalWheelEvent` | Mouse properties plus `deltaX` and `deltaY`; negative values mean left/up and positive values mean right/down |
-| `CSIEvent` | `type: "csi"`, final `instruction`, numeric `parameters`, `intermediates`, and `namespaceMarker` |
-| `SS3Event` | `type: "ss3"`, final `instruction` |
+| Event                   | Important properties                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TerminalKeyboardEvent` | `type: "keypress"`, `key: string`                                                                                                                    |
+| `TerminalMouseEvent`    | `type`, `button`, `buttons`, zero-based `column` and `row`, plus `leftMouseButton`, `middleMouseButton`, and `rightMouseButton` convenience booleans |
+| `TerminalWheelEvent`    | Mouse properties plus `deltaX` and `deltaY`; negative values mean left/up and positive values mean right/down                                        |
+| `CSIEvent`              | `type: "csi"`, final `instruction`, numeric `parameters`, `intermediates`, and `namespaceMarker`                                                     |
+| `SS3Event`              | `type: "ss3"`, final `instruction`                                                                                                                   |
 
 `MouseButton` identifies the button which changed (`None`, `Left`, `Middle`, or
 `Right`). `MouseButtonFlag` is a bit flag used by `buttons`; combine or test its
@@ -657,19 +660,19 @@ Every event has `altKey`, `ctrlKey`, and `shiftKey` booleans.
 
 ### Formatting
 
-`Formatting` is a fluent, immutable-at-the-root collection of ANSI styles.
-Named foreground colors are `black`, `red`, `green`, `yellow`, `blue`,
-`magenta`, `cyan`, `white`, and `gray`; prefix the capitalized name with `bg`
-for a background color. Styles are `bold`, `dimmed`, `italic`, `underlined`,
+`Formatting` is a fluent, immutable-at-the-root collection of ANSI styles. Named
+foreground colors are `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
+`cyan`, `white`, and `gray`; prefix the capitalized name with `bg` for a
+background color. Styles are `bold`, `dimmed`, `italic`, `underlined`,
 `blinking`, `inverted`, `hidden`, and `strikethrough`.
 
 ```ts
 import { Formatting } from "consolium/output";
 
 const statusLine = [
-    Formatting.green.bold,
-    "success ",
-    [Formatting.fg`#8A2BE2`.underlined, "with nested formatting"],
+  Formatting.green.bold,
+  "success ",
+  [Formatting.fg`#8A2BE2`.underlined, "with nested formatting"],
 ];
 ```
 
@@ -682,7 +685,7 @@ The `consolium/formatting` entry point also exports every named color and style
 directly:
 
 ```ts
-import { bold, green, fg } from "consolium/formatting";
+import { bold, fg, green } from "consolium/formatting";
 
 const lines = [[green.bold, "OK"], [fg`#09F`, "custom blue"], [bold, "note"]];
 ```
@@ -693,11 +696,11 @@ const lines = [[green.bold, "OK"], [fg`#09F`, "custom blue"], [bold, "note"]];
 import { Flex, Formatting, HorizontalLayout } from "consolium/output";
 
 const layout = new HorizontalLayout([
-    [Formatting.bold, "build"],
-    Flex.shrinkLeft({ preserve: 4, contentImportance: 1 }),
-    "packages/application/index.ts",
-    Flex.grow({ filler: ".", fillPriority: 1 }),
-    "done",
+  [Formatting.bold, "build"],
+  Flex.shrinkLeft({ preserve: 4, contentImportance: 1 }),
+  "packages/application/index.ts",
+  Flex.grow({ filler: ".", fillPriority: 1 }),
+  "done",
 ]);
 
 console.log(layout.unformattedWidth);
@@ -723,13 +726,13 @@ array of strings, nested formatting frames, and `Flex` boundaries.
 A boundary can affect content on either side and can be chained:
 
 ```ts
-["left", Flex.shrinkLeft().grow(" ").shrinkRight(), "right"]
+["left", Flex.shrinkLeft().grow(" ").shrinkRight(), "right"];
 ```
 
-| Method | Description |
-| --- | --- |
-| `Flex.shrinkLeft(value?)` | Allows content before the boundary to truncate at its end. |
-| `Flex.grow(value?)` | Inserts flexible filler at the boundary. |
+| Method                     | Description                                                 |
+| -------------------------- | ----------------------------------------------------------- |
+| `Flex.shrinkLeft(value?)`  | Allows content before the boundary to truncate at its end.  |
+| `Flex.grow(value?)`        | Inserts flexible filler at the boundary.                    |
 | `Flex.shrinkRight(value?)` | Allows content after the boundary to truncate at its start. |
 
 Each method is also available on the returned boundary for chaining.
@@ -738,10 +741,10 @@ Shrink methods accept a marker string, a custom truncation handler, or:
 
 ```ts
 interface FlexShrinkConfiguration {
-    truncator: string | ((fragments: string[], shrinkLength: number) => string[]);
-    preserve?: number;           // default 3, including the marker
-    contentImportance?: number;  // default 0; higher shrinks later
-    flexFactor?: number;         // default 1; relative shrink share
+  truncator: string | ((fragments: string[], shrinkLength: number) => string[]);
+  preserve?: number; // default 3, including the marker
+  contentImportance?: number; // default 0; higher shrinks later
+  flexFactor?: number; // default 1; relative shrink share
 }
 ```
 
@@ -753,10 +756,10 @@ of the range, including a string marker.
 
 ```ts
 interface FlexGrowConfiguration {
-    filler: string | ((targetLength: number) => string);
-    fillPriority?: number; // default 0; higher grows first
-    max?: number;          // default Infinity
-    flexFactor?: number;   // default 1; relative growth share
+  filler: string | ((targetLength: number) => string);
+  fillPriority?: number; // default 0; higher grows first
+  max?: number; // default Infinity
+  flexFactor?: number; // default 1; relative growth share
 }
 ```
 
@@ -766,9 +769,9 @@ interface FlexGrowConfiguration {
 import { VerticalLayout } from "consolium/output";
 
 const layout = new VerticalLayout(items, {
-    header: ["Items"],
-    footer: ["↑/↓ scroll"],
-    scrollOffset: 0,
+  header: ["Items"],
+  footer: ["↑/↓ scroll"],
+  scrollOffset: 0,
 });
 
 layout.scrollBy(1);
@@ -778,9 +781,9 @@ const visibleLines = layout.computeLines(terminalHeight);
 `content`, `header`, and `footer` are readonly arrays of `TerminalLine`.
 `scrollOffset` is normalized to a non-negative integer and may be read or set.
 `scrollBy(amount): this` adjusts it. `computeLines(height)` clamps the offset,
-keeps the footer at the bottom, keeps as much header as fits, slices the content,
-and fills unused content rows with empty lines. It returns exactly `height`
-lines for non-negative integer heights.
+keeps the footer at the bottom, keeps as much header as fits, slices the
+content, and fills unused content rows with empty lines. It returns exactly
+`height` lines for non-negative integer heights.
 
 ### `Table`
 
@@ -790,36 +793,37 @@ import { Formatting, Table, TableBorder } from "consolium/output";
 type PackageRow = { name: string; version: string; downloads: number };
 
 const table = new Table<PackageRow>({
-    name: {
-        header: "Package",
-        cellOptions: {
-            width: { minContentWidth: 8, flexFactor: 2 },
-            padding: { left: " ", right: " " },
-        },
+  name: {
+    header: "Package",
+    cellOptions: {
+      width: { minContentWidth: 8, flexFactor: 2 },
+      padding: { left: " ", right: " " },
     },
-    version: {
-        header: "Version",
-        cellOptions: { width: 10, align: { horizontal: "center" } },
+  },
+  version: {
+    header: "Version",
+    cellOptions: { width: 10, align: { horizontal: "center" } },
+  },
+  downloads: {
+    header: "Downloads",
+    cellOptions: {
+      width: { minContentWidth: 6, maxContentWidth: 12 },
+      align: { horizontal: "right" },
+      cell: (row) => row.downloads.toLocaleString(),
     },
-    downloads: {
-        header: "Downloads",
-        cellOptions: {
-            width: { minContentWidth: 6, maxContentWidth: 12 },
-            align: { horizontal: "right" },
-            cell: row => row.downloads.toLocaleString(),
-        },
-    },
+  },
 }, {
-    border: TableBorder.Rounded,
-    borderStyle: Formatting.gray,
+  border: TableBorder.Rounded,
+  borderStyle: Formatting.gray,
 });
 
 table.bodyData = [
-    { name: "consolium", version: "0.1.0", downloads: 1234 },
+  { name: "consolium", version: "0.1.0", downloads: 1234 },
 ];
 
-for (const line of table.renderLines(60))
-    console.log(line);
+for (const line of table.renderLines(60)) {
+  console.log(line);
+}
 ```
 
 #### Construction and rendering
@@ -830,16 +834,16 @@ Table.Auto(data, formatting?)
 table.renderLines(preferredOverallTableWidth?)
 ```
 
-| Parameter | Description |
-| --- | --- |
-| `columns` | Record whose keys identify columns and normally select the same property from each row. Object insertion order determines display order. |
-| `formatting` | `{ border?: TableBorder \| false; borderStyle?: FormattingAPI }`. The default border is `TableBorder.Sharp`; `false` is equivalent to `TableBorder.None`. |
-| `data` | Initial body rows; defaults to `[]`. Rows remain available as mutable `bodyData`. |
-| `footerData` | Optional partial row rendered after the body. It remains available as `footerData`. |
+| Parameter                    | Description                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `columns`                    | Record whose keys identify columns and normally select the same property from each row. Object insertion order determines display order.                           |
+| `formatting`                 | `{ border?: TableBorder \| false; borderStyle?: FormattingAPI }`. The default border is `TableBorder.Sharp`; `false` is equivalent to `TableBorder.None`.          |
+| `data`                       | Initial body rows; defaults to `[]`. Rows remain available as mutable `bodyData`.                                                                                  |
+| `footerData`                 | Optional partial row rendered after the body. It remains available as `footerData`.                                                                                |
 | `preferredOverallTableWidth` | `-1` (the default) sizes from content. A non-negative integer requests an overall width; flexible columns absorb as much of the difference as their limits permit. |
 
-`Table.Auto(data, formatting?)` infers one column per enumerable property of
-the first row and requires at least one row. `renderLines()` returns the table as
+`Table.Auto(data, formatting?)` infers one column per enumerable property of the
+first row and requires at least one row. `renderLines()` returns the table as
 physical strings. `emptyWidth` reports border/separator and padding width before
 cell content is added.
 
@@ -847,12 +851,12 @@ cell content is added.
 
 Each column may contain:
 
-| Property | Description |
-| --- | --- |
-| `header` | Header label. A header row is rendered when at least one column defines one. |
-| `headerOptions` | Overrides `cell` and `overflow` for the header. |
-| `cellOptions` | Controls body access, width, alignment, padding, and overflow. |
-| `footerOptions` | Overrides `cell` and `overflow` for the footer. |
+| Property        | Description                                                                  |
+| --------------- | ---------------------------------------------------------------------------- |
+| `header`        | Header label. A header row is rendered when at least one column defines one. |
+| `headerOptions` | Overrides `cell` and `overflow` for the header.                              |
+| `cellOptions`   | Controls body access, width, alignment, padding, and overflow.               |
+| `footerOptions` | Overrides `cell` and `overflow` for the footer.                              |
 
 A `cell(data, rowIndex, columnIndex, column)` callback returns `CellContent`.
 Without one, the column identifier is used to read the row. Arrays are treated
@@ -861,20 +865,20 @@ as structured `LineDefinition` values; other values are converted with
 
 `cellOptions` supports:
 
-| Property | Type and behavior |
-| --- | --- |
-| `width` | A non-negative integer fixes the content width. An object may set `minContentWidth` (default `0`), `maxContentWidth` (default unbounded), `flexFactor` (default `1`), and `contentImportance` (default `0`; higher-priority content shrinks later). |
-| `align.horizontal` | `"left"`, `"center"`, or `"right"`; default `"left"`. |
-| `align.vertical` | Reserved for vertically sized cells. |
-| `padding` | One string for both sides, or `{ left?: string; right?: string }`. Padding is outside the configured content width. |
-| `overflow.truncate` | Marker used when content is wider than its column; defaults to `…`. |
+| Property            | Type and behavior                                                                                                                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `width`             | A non-negative integer fixes the content width. An object may set `minContentWidth` (default `0`), `maxContentWidth` (default unbounded), `flexFactor` (default `1`), and `contentImportance` (default `0`; higher-priority content shrinks later). |
+| `align.horizontal`  | `"left"`, `"center"`, or `"right"`; default `"left"`.                                                                                                                                                                                               |
+| `align.vertical`    | Reserved for vertically sized cells.                                                                                                                                                                                                                |
+| `padding`           | One string for both sides, or `{ left?: string; right?: string }`. Padding is outside the configured content width.                                                                                                                                 |
+| `overflow.truncate` | Marker used when content is wider than its column; defaults to `…`.                                                                                                                                                                                 |
 
 #### Borders
 
 Choose `TableBorder.Sharp`, `TableBorder.Rounded`, or `TableBorder.None`.
 `border.withStyle(formatting)` returns a border using the supplied ANSI style;
-the predefined singleton is not modified. Supplying `formatting.borderStyle`
-to the table is the convenient equivalent.
+the predefined singleton is not modified. Supplying `formatting.borderStyle` to
+the table is the convenient equivalent.
 
 # License
 
