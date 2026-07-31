@@ -1,8 +1,8 @@
 {
   "$schema": "https://jsr.io/schema/config-file.v1.json",
-  "name": "@elemental/terminalium",
+  "name": "@elemental/consolium",
   "license": "MIT",
-  "repository": "https://github.com/elemental-mind/terminalium",
+  "repository": "https://github.com/elemental-mind/consolium",
   "compilerOptions": {
     "lib": [
       "deno.ns",
@@ -10,7 +10,13 @@
     ],
     "noImplicitOverride": false
   },
+  "imports": {
+    "apportionium": "jsr:@elemental/apportionium@^1.0.1"
+  },
   "exports": {
-    ".": "./source/terminalium.ts"
+    ".": "./source/consolium.ts",
+    "./input": "./source/input/api.ts",
+    "./output": "./source/output/api.ts",
+    "./formatting": "./source/formatting.ts"
   }
 }

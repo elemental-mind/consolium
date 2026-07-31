@@ -1,8 +1,21 @@
 {
   "name": "consolium",
   "version": "0.1.0",
-  "description": "",
-  "keywords": [],
+  "description": "Lightweight TypeScript toolkit for terminal input, ANSI formatting, responsive layouts, frames, and tables.",
+  "keywords": [
+    "terminal",
+    "cli",
+    "tty",
+    "ansi",
+    "tui",
+    "terminal-input",
+    "keyboard",
+    "mouse",
+    "layout",
+    "tables",
+    "typescript",
+    "deno"
+  ],
   "license": "MIT",
   "type": "module",
   "types": "./distribution/npm/consolium.d.ts",

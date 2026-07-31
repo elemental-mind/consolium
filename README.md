@@ -74,11 +74,15 @@ Install from npm:
 npm install consolium
 ```
 
-For Deno, install the npm package through Deno's npm compatibility:
+Or install the native JSR package with Deno:
 
 ```sh
-deno add npm:consolium
+deno add jsr:@elemental/consolium
 ```
+
+Both packages expose the same root API and the `/input`, `/output`, and
+`/formatting` subpaths. npm imports use `consolium`; JSR imports use
+`@elemental/consolium`. The examples below use the npm specifier.
 
 # Concepts
 
