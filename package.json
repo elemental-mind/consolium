@@ -20,6 +20,10 @@
     "./output": {
       "types": "./distribution/npm/output/api.d.ts",
       "import": "./distribution/npm/output/api.js"
+    },
+    "./formatting": {
+      "types": "./distribution/npm/formatting.d.ts",
+      "import": "./distribution/npm/formatting.js"
     }
   },
   "author": "Magnus Meseck",
