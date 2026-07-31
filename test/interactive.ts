@@ -1,4 +1,4 @@
-import { TerminalEventStream } from "../source/terminalium.ts";
+import { TerminalEventStream } from "../source/input/api.ts";
 
 export async function logEvents()
 {

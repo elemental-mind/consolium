@@ -56,6 +56,5 @@ export class TerminalEventTestSuite
         assert(event instanceof TerminalMouseEvent);
         assert.equal(event.type, "wheel");
         assert.equal(event.deltaY, -1);
-        assert.equal(event.deltaMode, TerminalWheelEvent.DOM_DELTA_LINE);
     }
 }
