@@ -3,26 +3,46 @@ import { FormattingSettings, type FormattingAPI } from "../formatting/formatting
 import { extendTextArrayEnd, textWidth, truncateStringsEnd } from "../formatting/textSize.ts";
 import { DefaultTruncationMarker, FlexBoundary, type FlexAPI, type GrowthContext, type ShrinkContext } from "./flex.ts";
 
+/** A line's elements, optionally wrapped in a formatting frame. */
 export type LineDefinition = LineElement[] | FormattingFrame;
+/** An item accepted in a horizontal line definition. */
 export type LineElement = string | FormattingFrame | FlexAPI;
+/** A formatting style followed by the elements to which it applies. */
 export type FormattingFrame = [style: FormattingAPI, ...LineElement[]];
 
+/** Fallback operations used when flexible regions cannot reach a requested width. */
 export interface ForcedWidthOptions
 {
+    /** Marker appended when forced truncation is necessary. */
     truncator?: string;
+    /** Function used to force truncation. */
     truncate: typeof truncateStringsEnd;
+    /** Fill string appended when forced extension is necessary. */
     filler?: string;
+    /** Function used to force extension. */
     fill: typeof extendTextArrayEnd;
 }
 
+/** Parses and renders one terminal line with nested formatting and flexible regions. */
 export class HorizontalLayout
 {
+    /** Unformatted text fragments collected from the line definition. */
     normalizedStrings: string[] = [];
+    /** Cumulative visible widths for `normalizedStrings`. */
     cumulativeStringLengths: number[] = [0];
 
+    /** Flexible ranges discovered while parsing the line definition. */
     flexRanges: FlexRange[] = [];
+    /** Formatting ranges discovered while parsing the line definition. */
     formattingRanges: FormattingRange[] = [];
 
+    /**
+     * Parses a structured line definition into renderable ranges.
+     * @param lineDefinition Text, formatting frames, and flexible boundaries.
+     * @example
+     * new HorizontalLayout(["left", Flex.grow(" "), "right"]);
+     * new HorizontalLayout([Formatting.bold, "emphasized"]);
+     */
     constructor(lineDefinition: LineDefinition)
     {
         this.flexRanges.push(new FlexRange(this));
@@ -30,11 +50,19 @@ export class HorizontalLayout
         this.parseFormattingFrame(lineDefinition, FormattingSettings.None);
     }
 
+    /** Visible width of the parsed line before flexible adjustment. */
     get unformattedWidth(): number
     {
         return this.cumulativeStringLengths.at(-1)!;
     }
 
+    /**
+     * Renders the line at a target width.
+     *
+     * @param targetWidth - Required visible width.
+     * @param force - Optional fallback operations when configured ranges are insufficient.
+     * @returns Formatted terminal text.
+     */
     computeString(targetWidth: number, force?: ForcedWidthOptions): string
     {
         if (targetWidth < 0) throw new Error("Negative length strings not possible!");
@@ -207,33 +235,52 @@ export class HorizontalLayout
     }
 }
 
+/** Contiguous fragment range shared by formatting and flexible layout concerns. */
 export class Range<RangeType extends Range<RangeType>>
 {
+    /** Layout that owns this range. */
     readonly layout: HorizontalLayout;
+    /** Next adjacent range, if any. */
     next?: RangeType;
+    /** Index of this range's first text fragment. */
     startIndex: number;
 
+    /**
+     * Creates a range starting at the layout's current fragment position.
+     *
+     * @param layout - Owning horizontal layout.
+     */
     constructor(layout: HorizontalLayout)
     {
         this.layout = layout;
         this.startIndex = layout.normalizedStrings.length;
     }
 
+    /** Index immediately after this range's final text fragment. */
     get endIndex(): number
     {
         return this.next?.startIndex ?? this.layout.normalizedStrings.length;
     }
 
+    /** Whether this range contains no text fragments. */
     get isEmpty(): boolean
     {
         return this.endIndex === this.startIndex;
     }
 
+    /** Visible width of this range before adjustment. */
     get baseLength(): number
     {
         return this.layout.cumulativeStringLengths[this.endIndex] - this.layout.cumulativeStringLengths[this.startIndex];
     }
 
+    /**
+     * Links and records a following range.
+     *
+     * @param range - Range to append.
+     * @param ranges - Owning range collection.
+     * @returns The appended range.
+     */
     protected append(range: RangeType, ranges: RangeType[]): RangeType
     {
         this.next = range;
@@ -241,23 +288,43 @@ export class Range<RangeType extends Range<RangeType>>
         return range;
     }
 
-    /** Reuses this range when it is still empty, otherwise links in a new range created by the factory. */
+    /**
+     * Reuses this range when it is empty, otherwise appends a new one.
+     *
+     * @param ranges - Owning range collection.
+     * @param createRange - Factory for a following range.
+     * @returns This range or the appended range.
+     */
     protected appendOrReuse(ranges: RangeType[], createRange: () => RangeType): this | RangeType
     {
         return this.isEmpty ? this : this.append(createRange(), ranges);
     }
 }
 
+/** Fragment range with one terminal formatting setting. */
 export class FormattingRange extends Range<FormattingRange>
 {
+    /** Formatting applied to text in this range. */
     formatting: FormattingSettings;
 
+    /**
+     * Creates a formatted range.
+     *
+     * @param layout - Owning horizontal layout.
+     * @param formatting - Formatting applied to this range.
+     */
     constructor(layout: HorizontalLayout, formatting: FormattingSettings)
     {
         super(layout);
         this.formatting = formatting;
     }
 
+    /**
+     * Starts a following range using a formatting setting.
+     *
+     * @param formatting - Formatting for the following range.
+     * @returns The reused or appended range.
+     */
     appendRange(formatting: FormattingSettings): this | FormattingRange
     {
         const range = this.appendOrReuse(this.layout.formattingRanges, () => new FormattingRange(this.layout, formatting));
@@ -265,6 +332,12 @@ export class FormattingRange extends Range<FormattingRange>
         return range;
     }
 
+    /**
+     * Formats this range's slice of fragments.
+     *
+     * @param strings - All adjusted layout fragments.
+     * @returns The formatted text for this range.
+     */
     getFormattedString(strings: string[]): string
     {
         const text = strings.slice(this.startIndex, this.endIndex).join("");
@@ -273,11 +346,15 @@ export class FormattingRange extends Range<FormattingRange>
     }
 }
 
+/** Fragment range that may grow or truncate during width adjustment. */
 export class FlexRange extends Range<FlexRange>
 {
+    /** Truncation context applied to this range, if any. */
     truncator?: ShrinkContext;
+    /** Growth context applied to this range, if any. */
     filler?: GrowthContext;
 
+    /** Maximum width this range can currently surrender. */
     get truncationCapacity(): number
     {
         if (!this.truncator) return 0;
@@ -286,16 +363,27 @@ export class FlexRange extends Range<FlexRange>
         return Math.max(0, this.baseLength - preservedLength);
     }
 
+    /** Priority used when distributing truncation. */
     get contentImportance(): number
     {
         return this.truncator?.contentImportance ?? 0;
     }
 
+    /**
+     * Starts a following flexible range.
+     *
+     * @returns The reused or appended range.
+     */
     appendRange(): this | FlexRange
     {
         return this.appendOrReuse(this.layout.flexRanges, () => new FlexRange(this.layout));
     }
 
+    /**
+     * Sets this range's truncation context.
+     *
+     * @param truncator - Context to use for truncation.
+     */
     setTruncator(truncator: ShrinkContext)
     {
         if (this.truncator) throw new RangeError("A FlexRange can only have one truncator. Choose either shrinkLeft() or shrinkRight().");
@@ -303,6 +391,13 @@ export class FlexRange extends Range<FlexRange>
         this.truncator = truncator;
     }
 
+    /**
+     * Grows this range in place.
+     *
+     * @param growthTarget - Fragments to modify.
+     * @param growBy - Requested width to add.
+     * @returns Width actually added.
+     */
     grow(growthTarget: string[], growBy: number): number
     {
         const filler = this.filler!;
@@ -313,6 +408,13 @@ export class FlexRange extends Range<FlexRange>
         return possibleGrowth;
     }
 
+    /**
+     * Truncates this range in place.
+     *
+     * @param truncationTarget - Fragments to modify.
+     * @param truncateBy - Requested width to remove.
+     * @returns Width actually removed.
+     */
     truncate(truncationTarget: string[], truncateBy: number): number
     {
         const possibleTruncation = Math.min(truncateBy, this.truncationCapacity);

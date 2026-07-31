@@ -1,5 +1,6 @@
 import { TerminalEventStream } from "../source/input/api.ts";
 
+/** Reads decoded terminal events and logs them until Ctrl+C is pressed. */
 export async function logEvents()
 {
     if (!TerminalEventStream.isSupported)

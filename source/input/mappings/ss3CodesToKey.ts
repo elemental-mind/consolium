@@ -1,3 +1,4 @@
+/** Maps SS3 instruction characters to normalized key names. */
 export const ss3InstructionsToKey = new Map([
     ["A", "ArrowUp"],
     ["B", "ArrowDown"],

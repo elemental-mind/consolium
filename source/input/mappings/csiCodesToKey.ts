@@ -1,3 +1,4 @@
+/** Maps parameterless CSI instruction characters to normalized key names. */
 export const csiInstructionToKey = new Map([
     ["A", "ArrowUp"],
     ["B", "ArrowDown"],
@@ -7,6 +8,7 @@ export const csiInstructionToKey = new Map([
     ["H", "Home"],
 ]);
 
+/** Maps CSI `~` parameters to normalized navigation and function key names. */
 export const tildeInstructionParamToKey = new Map([
     [1, "Home"],
     [2, "Insert"],

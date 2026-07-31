@@ -9,6 +9,12 @@ const isNormalCharacter = /^[\x20-\x7E]$/;
 
 const onlyNormalCharacters = /^[\x20-\x7E]*$/;
 
+/**
+ * Measures the terminal column width of text by grapheme cluster.
+ *
+ * @param text - Text to measure.
+ * @returns The number of terminal columns occupied by the text.
+ */
 export function textWidth(text: string): number
 {
     if (text === "")
@@ -26,6 +32,12 @@ export function textWidth(text: string): number
 /**
  * Truncates complete graphemes from the start, retaining targetContentWidth columns
  * of content and prefixing a truncator when truncation occurs.
+ *
+ * @param text - Text to truncate.
+ * @param currentWidth - Precomputed terminal width of `text`.
+ * @param targetContentWidth - Maximum width to retain before the truncator.
+ * @param truncator - Prefix inserted when truncation occurs.
+ * @returns The start-truncated text.
  */
 export function truncateTextStart(text: string, currentWidth: number, targetContentWidth: number, truncator = ""): string
 {
@@ -54,6 +66,12 @@ export function truncateTextStart(text: string, currentWidth: number, targetCont
 /**
  * Truncates complete graphemes from the end, retaining targetContentWidth columns
  * of content and suffixing a truncator when truncation occurs.
+ *
+ * @param text - Text to truncate.
+ * @param currentWidth - Precomputed terminal width of `text`.
+ * @param targetContentWidth - Maximum width to retain before the truncator.
+ * @param truncator - Suffix inserted when truncation occurs.
+ * @returns The end-truncated text.
  */
 export function truncateTextEnd(text: string, currentWidth: number, targetContentWidth: number, truncator = ""): string
 {
@@ -79,7 +97,15 @@ export function truncateTextEnd(text: string, currentWidth: number, targetConten
     return text;
 }
 
-/** Truncates fragments from the start, retaining their positions for formatting. */
+/**
+ * Truncates fragments from the start while retaining their positions for formatting.
+ *
+ * @param textArrayToModify - Fragments to truncate in place.
+ * @param currentWidth - Precomputed combined terminal width.
+ * @param targetWidth - Maximum combined terminal width.
+ * @param truncator - Prefix inserted at the truncation boundary.
+ * @returns The modified fragment array.
+ */
 export function truncateStringsStart(textArrayToModify: string[], currentWidth: number, targetWidth: number, truncator = ""): string[]
 {
     return truncateStrings(textArrayToModify, currentWidth, targetWidth, truncator, {
@@ -89,7 +115,15 @@ export function truncateStringsStart(textArrayToModify: string[], currentWidth: 
     });
 }
 
-/** Truncates fragments from the end, retaining their positions for formatting. */
+/**
+ * Truncates fragments from the end while retaining their positions for formatting.
+ *
+ * @param textArrayToModify - Fragments to truncate in place.
+ * @param currentWidth - Precomputed combined terminal width.
+ * @param targetWidth - Maximum combined terminal width.
+ * @param truncator - Suffix inserted at the truncation boundary.
+ * @returns The modified fragment array.
+ */
 export function truncateStringsEnd(textArrayToModify: string[], currentWidth: number, targetWidth: number, truncator = ""): string[]
 {
     return truncateStrings(textArrayToModify, currentWidth, targetWidth, truncator, {
@@ -136,7 +170,15 @@ function truncateStrings(textArrayToModify: string[], currentWidth: number, targ
     return textArrayToModify;
 }
 
-/** Extends the first fragment, retaining the array shape used by formatting ranges. */
+/**
+ * Extends the first fragment, retaining the array shape used by formatting ranges.
+ *
+ * @param text - Fragments to extend.
+ * @param currentWidth - Precomputed combined terminal width.
+ * @param targetWidth - Desired combined terminal width.
+ * @param filler - Text used to fill the added columns.
+ * @returns An extended copy of the fragments, or the original array when no extension is needed.
+ */
 export function extendTextArrayStart(text: string[], currentWidth: number, targetWidth: number, filler = " "): string[]
 {
     if (currentWidth >= targetWidth || text.length === 0)
@@ -147,7 +189,15 @@ export function extendTextArrayStart(text: string[], currentWidth: number, targe
     return extendedText;
 }
 
-/** Extends the last fragment, retaining the array shape used by formatting ranges. */
+/**
+ * Extends the last fragment, retaining the array shape used by formatting ranges.
+ *
+ * @param text - Fragments to extend.
+ * @param currentWidth - Precomputed combined terminal width.
+ * @param targetWidth - Desired combined terminal width.
+ * @param filler - Text used to fill the added columns.
+ * @returns An extended copy of the fragments, or the original array when no extension is needed.
+ */
 export function extendTextArrayEnd(text: string[], currentWidth: number, targetWidth: number, filler = " "): string[]
 {
     if (currentWidth >= targetWidth || text.length === 0)

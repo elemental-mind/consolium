@@ -5,13 +5,20 @@
  * @module
  */
 
+/** Terminal text-formatting factory and API. */
 export { Formatting } from "./formatting/formatting.ts";
 
+/** Types and class for responsive horizontal line layout. */
 export { type LineDefinition, HorizontalLayout } from "./layouting/horizontalLayout.ts";
+/** Class for viewport-aware vertical line layout. */
 export { VerticalLayout } from "./layouting/verticalLayout.ts";
 
+/** Factory API for flexible growth and truncation boundaries. */
 export { Flex } from "./layouting/flex.ts";
+/** Configuration types for flexible growth and truncation boundaries. */
 export type { FlexGrowConfiguration, FlexShrinkConfiguration } from "./layouting/flex.ts";
 
+/** Table renderer and border definitions. */
 export { Table, TableBorder } from "./layouting/tables.ts";
+/** Types accepted when defining table cells, columns, and formatting. */
 export type { CellContent, TableColumns, TableFormatting } from "./layouting/tables.ts";

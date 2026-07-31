@@ -8,61 +8,124 @@ import { HorizontalLayout, type LineDefinition, type LineElement } from "./horiz
 // Types & Interfaces
 //----------------------------------------
 
+/** Pre-formatted inline content that can be laid out within a table cell. */
 export type FormattedCellContent = LineDefinition;
+/** A value accepted as table cell content before it is converted to text or formatted layout. */
 export type CellContent = FormattedCellContent | string | number | bigint | boolean | object | null | undefined;
+/** A mapping from column identifiers to their definitions for entries of type `EntryType`. */
 export type TableColumns<EntryType> = Record<string, TableColumnDefinition<EntryType>>;
+/** Header labels keyed by string properties of `EntryType`. */
 export type TableHeaderData<EntryType> = Partial<Record<Extract<keyof EntryType, string>, string>>;
 
+/** Defines the header and cell behavior for a table column. */
 export interface TableColumnDefinition<EntryType>
 {
+    /** Static header text for this column. */
     header?: string;
+    /** Options used when rendering this column's header cell. */
     headerOptions?: TableSectionCellOptions<TableHeaderData<EntryType>>;
+    /** Options used when rendering this column's body cells. */
     cellOptions?: TableCellOptions<EntryType>;
+    /** Options used when rendering this column's footer cell. */
     footerOptions?: TableSectionCellOptions<Partial<EntryType>>;
 }
 
+/** Options shared by header, body, and footer cells. */
 export interface TableSectionCellOptions<Data>
 {
+    /**
+     * Produces the content for a cell.
+     *
+     * @param data The data object for the current section row.
+     * @param rowIndex Zero-based row index within the section.
+     * @param columnIndex Zero-based index of the column.
+     * @param column The resolved table column.
+     * @returns Content to render in the cell.
+     */
     cell?: (data: Data, rowIndex: number, columnIndex: number, column: TableColumn<any>) => CellContent;
+    /** Controls how oversized cell content is truncated. */
     overflow?: TableCellOverflow;
 }
 
+/** Options specific to body cells in a table column. */
 export interface TableCellOptions<Data> extends TableSectionCellOptions<Data>
 {
+    /**
+     * Sets a fixed content width or flexible width constraints for the column.
+     *
+     * @example
+     * ```ts
+     * width: 12 // fixed width
+     * ```
+     *
+     * @example
+     * ```ts
+     * width: { minContentWidth: 8, maxContentWidth: 24, flexFactor: 2 }
+     * ```
+     */
     width?: number | TableColumnWidth;
+    /** Sets horizontal and vertical cell alignment preferences. */
     align?: TableCellAlignment;
+    /**
+     * Adds symmetric or side-specific padding around cell content.
+     *
+     * @example
+     * ```ts
+     * padding: " "
+     * ```
+     *
+     * @example
+     * ```ts
+     * padding: { left: " ", right: "  " }
+     * ```
+     */
     padding?: string | TableCellPadding;
 }
 
+/** Flexible width constraints and allocation preferences for a table column. */
 export interface TableColumnWidth
 {
+    /** Minimum content width, in terminal columns. */
     minContentWidth?: number;
+    /** Maximum content width, in terminal columns. */
     maxContentWidth?: number;
+    /** Relative share used when distributing extra width among flexible columns. */
     flexFactor?: number;
+    /** Priority for retaining width when the table must shrink; lower values shrink first. */
     contentImportance?: number;
 }
 
+/** Controls the appearance of a rendered table. */
 export interface TableFormatting
 {
+    /** Border preset to use, or `false` to omit borders. */
     border?: TableBorder | false;
+    /** Formatting applied to border characters. */
     borderStyle?: FormattingAPI;
 }
 
+/** Controls truncation of content that exceeds its cell width. */
 export interface TableCellOverflow
 {
     /** Defaults to the single-column Unicode ellipsis (`…`). */
     truncate?: string;
 }
 
+/** Controls horizontal and vertical alignment for table cell content. */
 export interface TableCellAlignment
 {
+    /** Horizontal content alignment. */
     horizontal?: "left" | "center" | "right";
+    /** Vertical content alignment. Reserved for compatible cell layouts. */
     vertical?: "top" | "middle" | "bottom";
 }
 
+/** Specifies text inserted on either side of cell content. */
 export interface TableCellPadding
 {
+    /** Text inserted before the cell content. */
     left?: string;
+    /** Text inserted after the cell content. */
     right?: string;
 }
 
@@ -85,8 +148,16 @@ interface TableBorderOptions
 // Implementation Logic
 //----------------------------------------------
 
+/** Renders typed data as a width-aware text table. */
 export class Table<EntryType>
 {
+    /**
+     * Creates a table by inferring columns from the first data entry's enumerable properties.
+     *
+     * @param data Source rows. Must contain at least one entry.
+     * @param formatting Visual formatting options.
+     * @returns A table configured with inferred columns and the supplied rows.
+     */
     static Auto<EntryType extends object>(data: EntryType[], formatting: TableFormatting = {}): Table<EntryType>
     {
         if (!data.length) throw new Error("Provide at least one data point to infer a schema from.");
@@ -99,14 +170,26 @@ export class Table<EntryType>
         return new Table<EntryType>(columnDefinitions, formatting, data);
     }
 
+    /** Resolved columns in display order. */
     readonly columns: TableColumn<EntryType>[];
 
+    /** Optional data used to render the header row. */
     headerData?: TableHeaderData<EntryType>;
+    /** Data rows rendered in the table body. */
     bodyData: EntryType[];
+    /** Optional data used to render the footer row. */
     footerData?: Partial<EntryType>;
 
     private readonly renderer: TableRenderer;
 
+    /**
+     * Creates a table with explicit column definitions.
+     *
+     * @param columns Definitions keyed by column identifier.
+     * @param formatting Visual formatting options.
+     * @param data Optional initial body rows.
+     * @param footerData Optional data for the footer row.
+     */
     constructor(columns: TableColumns<EntryType>, formatting: TableFormatting = {}, data?: EntryType[], footerData?: Partial<EntryType>)
     {
         this.columns = Object.entries(columns).map(([identifier, definition], index) => new TableColumn(index, identifier, definition));
@@ -117,11 +200,24 @@ export class Table<EntryType>
         this.footerData = footerData;
     }
 
+    /** Width occupied by borders and horizontal padding when every column has zero content width. */
     get emptyWidth(): number
     {
         return this.renderer.border.getRequiredCellSeparatorSpace(this.columns.length) + this.columns.reduce((total, column) => total + column.paddingSize, 0);
     }
 
+    /**
+     * Renders the table as terminal-ready text lines.
+     *
+     * @param preferredOverallTableWidth Target total width, or `-1` to use intrinsic content widths.
+     * @returns Rendered lines, including visible border lines.
+     *
+     * @example
+     * table.renderLines() // use intrinsic content widths
+     *
+     * @example
+     * table.renderLines(80) // target an 80-column table
+     */
     renderLines(preferredOverallTableWidth: number = -1): string[]
     {
         if (!Number.isInteger(preferredOverallTableWidth) || preferredOverallTableWidth < -1)
@@ -265,25 +361,46 @@ export class Table<EntryType>
 
 class TableColumn<EntryType>
 {
+    /** Zero-based display position of the column. */
     readonly index: number;
+    /** Key used to read the column's default values from row data. */
     readonly identifier: string;
+    /** Optional static header label. */
     readonly header?: string;
 
+    /** Smallest permitted content width. */
     readonly minimumWidth: number;
+    /** Largest permitted content width. */
     readonly maximumWidth: number;
+    /** Relative share used when distributing available flexible width. */
     readonly flexFactor: number;
+    /** Priority used when reducing flexible widths. */
     readonly contentImportance: number;
 
+    /** Callback that resolves header cell content. */
     readonly headerCellAccessor: CellAccessor;
+    /** Callback that resolves body cell content. */
     readonly bodyCellAccessor: CellAccessor;
+    /** Callback that resolves footer cell content. */
     readonly footerCellAccessor: CellAccessor;
 
+    /** Left and right text padding applied to each rendered cell. */
     readonly padding: Required<TableCellPadding>;
+    /** Combined width of the horizontal padding. */
     readonly paddingSize: number;
 
+    /** Horizontal alignment used to render content. */
     readonly alignment: NonNullable<TableCellAlignment["horizontal"]>;
+    /** Marker appended or prepended when content is truncated. */
     readonly truncator: string;
 
+    /**
+     * Resolves a column definition into its rendering configuration.
+     *
+     * @param index Zero-based display position.
+     * @param identifier Key used to access row data.
+     * @param definition User-provided column definition.
+     */
     constructor(index: number, identifier: string, definition: TableColumnDefinition<EntryType>)
     {
         this.index = index;
@@ -326,6 +443,7 @@ class TableColumn<EntryType>
         this.truncator = definition.cellOptions?.overflow?.truncate ?? DefaultTruncationMarker;
     }
 
+    /** Whether the column can grow or shrink between different content widths. */
     get isFlexible(): boolean
     {
         return this.maximumWidth > this.minimumWidth;
@@ -358,10 +476,17 @@ class TableColumn<EntryType>
 
 class TableRenderer
 {
+    /** Border implementation used for all rendered rows. */
     public border: TableBorder;
 
     private table: Table<any>;
 
+    /**
+     * Creates a renderer for a table and its formatting configuration.
+     *
+     * @param table Table whose data and columns are rendered.
+     * @param formatting Visual formatting options.
+     */
     constructor(table: Table<any>, formatting: TableFormatting)
     {
         this.table = table;
@@ -370,6 +495,15 @@ class TableRenderer
         this.border = border.withStyle(formatting.borderStyle);
     }
 
+    /**
+     * Renders parsed header, body, and footer cells using the supplied content widths.
+     *
+     * @param headerCells Optional parsed header cells.
+     * @param bodyCells Optional parsed body cells.
+     * @param footerCells Optional parsed footer cells.
+     * @param widths Content widths for each column.
+     * @returns Rendered table lines.
+     */
     renderLines(headerCells: ParsedCellContent[] | undefined, bodyCells: ParsedCellContent[] | undefined, footerCells: ParsedCellContent[] | undefined, widths: number[])
     {
         const columns = this.table.columns;
@@ -470,9 +604,12 @@ class TableRenderer
     }
 }
 
+/** Defines the characters and formatting used to surround and separate table cells. */
 export class TableBorder
 {
+    /** A borderless table style. */
     static readonly None: TableBorder = new TableBorder();
+    /** A rectangular border style using square corners. */
     static readonly Sharp: TableBorder = new TableBorder({
         top: { left: "┌", join: "┬", right: "┐" },
         middle: { left: "├", join: "┼", right: "┤" },
@@ -480,6 +617,7 @@ export class TableBorder
         horizontal: "─",
         vertical: "│",
     });
+    /** A rectangular border style using rounded outer corners. */
     static readonly Rounded: TableBorder = new TableBorder({
         top: { left: "╭", join: "┬", right: "╮" },
         middle: { left: "├", join: "┼", right: "┤" },
@@ -488,7 +626,9 @@ export class TableBorder
         vertical: "│",
     });
 
+    /** Formatting applied to all border characters. */
     readonly style: FormattingSettings;
+    /** Whether this border emits visible separator and outline characters. */
     readonly isVisible: boolean;
     private readonly definition?: TableBorderOptions;
 
@@ -499,6 +639,18 @@ export class TableBorder
         this.style = borderCharacters?.style as FormattingSettings ?? FormattingSettings.None;
     }
 
+    /**
+     * Returns this border with the supplied formatting, preserving its characters.
+     *
+     * @param style Formatting to apply; `undefined` leaves this border unchanged.
+     * @returns A styled border, or this instance when styling cannot be applied.
+     *
+     * @example
+     * ```ts
+     * TableBorder.Sharp.withStyle(FormattingSettings.None);
+     * TableBorder.Sharp.withStyle(undefined);
+     * ```
+     */
     withStyle(style: FormattingAPI | undefined): TableBorder
     {
         if (!style || !this.definition) return this;
@@ -509,11 +661,23 @@ export class TableBorder
         });
     }
 
+    /**
+     * Gets the width consumed by vertical borders between and around cells.
+     *
+     * @param columnCount Number of columns in the table.
+     * @returns Required separator width in terminal columns.
+     */
     getRequiredCellSeparatorSpace(columnCount: number): number
     {
         return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
     }
 
+    /**
+     * Joins rendered cells, adding and formatting vertical separators when visible.
+     *
+     * @param cells Rendered cell strings in display order.
+     * @returns The complete rendered row.
+     */
     renderCellsWithCellSeparators(cells: string[]): string
     {
         if (!this.isVisible) return cells.join("");
@@ -521,6 +685,29 @@ export class TableBorder
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
     }
 
+    /**
+     * Renders one horizontal border line for the supplied column widths.
+     *
+     * @param position Border line to render.
+     * @param columns Resolved table columns.
+     * @param contentWidths Content width for each column.
+     * @returns The formatted border line, or `undefined` when no line is visible.
+     *
+     * @example
+     * ```ts
+     * border.renderHorizontalLine("top", columns, widths)
+     * ```
+     *
+     * @example
+     * ```ts
+     * border.renderHorizontalLine("middle", columns, widths)
+     * ```
+     *
+     * @example
+     * ```ts
+     * border.renderHorizontalLine("bottom", columns, widths)
+     * ```
+     */
     renderHorizontalLine(position: "top" | "middle" | "bottom", columns: TableColumn<any>[], contentWidths: number[]): string | undefined
     {
         if (!this.isVisible || columns.length === 0) return undefined;

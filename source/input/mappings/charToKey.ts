@@ -1,3 +1,4 @@
+/** Maps terminal control characters to normalized key names. */
 export const namedCharacters = new Map([
     ["\x00", " "],
     ["\x08", "Backspace"],

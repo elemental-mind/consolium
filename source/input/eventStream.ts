@@ -9,8 +9,10 @@ import { ss3InstructionsToKey } from "./mappings/ss3CodesToKey.ts";
 import { TerminalInputStream } from "./rawStream.ts";
 import type { BitField } from "../utils/bitField.ts";
 
+/** Decodes raw terminal input into keyboard, mouse, CSI, and SS3 events. */
 export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
 {
+    /** Whether interactive terminal input is available in the current process. */
     static get isSupported(): boolean
     {
         return TerminalInputStream.isSupported;
@@ -20,8 +22,15 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
     private eventDecoder = new TerminalEventDecoder();
     private eventStream?: AsyncGenerator<TerminalInputEvent, void>;
 
+    /** Whether the stream is open and ready to yield events. */
     get isOpen(): boolean { return this.eventStream !== undefined; }
 
+    /**
+     * Opens raw input and begins decoding terminal events.
+     *
+     * @returns This stream for chaining.
+     * @throws {Error} When standard input and output are not interactive TTYs.
+     */
     open(): this
     {
         if (!TerminalEventStream.isSupported)
@@ -37,7 +46,11 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
         return this;
     }
 
-    /** Reads and consumes a single terminal event. */
+    /**
+     * Reads and consumes a single terminal event.
+     *
+     * @returns The next event, or `undefined` when the stream is closed or exhausted.
+     */
     async read(): Promise<TerminalInputEvent | undefined>
     {
         if (!this.eventStream)
@@ -47,6 +60,7 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
         return result.done ? undefined : result.value;
     }
 
+    /** Stops the stream, restores terminal input, and releases pending iteration. */
     async close()
     {
         if (!this.eventStream)
@@ -59,6 +73,12 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
         await eventStream.return(undefined);
     }
 
+    /**
+     * Returns the asynchronous event iterator for this open stream.
+     *
+     * @returns An iterator that yields decoded terminal input events.
+     * @throws {Error} When the stream is closed.
+     */
     [Symbol.asyncIterator](): AsyncIterator<TerminalInputEvent>
     {
         if (!this.eventStream)
@@ -146,10 +166,24 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
     }
 }
 
+/** Stateful decoder for individual terminal characters and escape sequences. */
 export class TerminalEventDecoder
 {
     private buttons: MouseButtonFlags = MouseButtonFlag.None;
 
+    /**
+     * Decodes one non-CSI/SS3 terminal character as a keyboard event.
+     *
+     * @param value - Character to decode, including control characters.
+     * @param modifiers - Modifier state supplied by the enclosing escape sequence.
+     * @returns The normalized keyboard event.
+     * @example
+     * ```ts
+     * const decoder = new TerminalEventDecoder();
+     * decoder.decodeCharacter("a"); // key "a"
+     * decoder.decodeCharacter("\x03"); // Ctrl+C
+     * ```
+     */
     decodeCharacter(value: string, modifiers: Partial<ModifierInfo> = {})
     {
         const namedKey = namedCharacters.get(value);
@@ -173,6 +207,22 @@ export class TerminalEventDecoder
         });
     }
 
+    /**
+     * Decodes a parsed CSI sequence.
+     *
+     * @param namespaceMarker - Optional CSI private namespace marker, such as `"<"` for SGR mouse input.
+     * @param instruction - CSI final instruction character.
+     * @param parameterString - Semicolon-delimited numeric CSI parameters.
+     * @param intermediates - CSI intermediate characters.
+     * @returns A recognized keyboard or mouse event, or a generic `CSIEvent`.
+     * @example
+     * ```ts
+     * const decoder = new TerminalEventDecoder();
+     * decoder.decodeCSISequence("", "A", "", ""); // ArrowUp keyboard event
+     * decoder.decodeCSISequence("<", "M", "0;1;1", ""); // mouse-down event
+     * decoder.decodeCSISequence("", "q", "", ""); // CSIEvent
+     * ```
+     */
     decodeCSISequence(namespaceMarker: string, instruction: string, parameterString: string, intermediates: string)
     {
         const parameters = parameterString.length ? parameterString.split(";").map(parameter => parameter.length ? Number(parameter) : 0) : [];
@@ -203,6 +253,18 @@ export class TerminalEventDecoder
         return event;
     }
 
+    /**
+     * Decodes a parsed SS3 sequence.
+     *
+     * @param instruction - SS3 instruction character.
+     * @returns A recognized keyboard event, or a generic `SS3Event`.
+     * @example
+     * ```ts
+     * const decoder = new TerminalEventDecoder();
+     * decoder.decodeSS3Sequence("P"); // F1 keyboard event
+     * decoder.decodeSS3Sequence("x"); // SS3Event
+     * ```
+     */
     decodeSS3Sequence(instruction: string)
     {
         const key = ss3InstructionsToKey.get(instruction);

@@ -1,8 +1,10 @@
 import { TextDecoder } from "node:util";
 import type { TerminalStream } from "./api.ts";
 
+/** Reads raw Unicode characters from the process terminal. */
 export class TerminalInputStream implements TerminalStream<string>
 {
+    /** Whether interactive terminal input is available in the current process. */
     static get isSupported(): boolean
     {
         return process.stdin.isTTY === true && process.stdout.isTTY === true;
@@ -16,16 +18,24 @@ export class TerminalInputStream implements TerminalStream<string>
     private nextValuePromise: PromiseWithResolvers<string | undefined> | null = null;
     private valuePromiseAwaiterIsConsumingChar: boolean = false;
 
+    /** Whether raw terminal input is currently enabled. */
     get isOpen(): boolean
     {
         return this.decoder !== undefined;
     }
 
+    /** Whether one or more characters are available without waiting. */
     get hasBufferedInput(): boolean
     {
         return this.buffer.length > 0;
     }
 
+    /**
+     * Enables raw input and terminal mouse reporting.
+     *
+     * @returns This stream for chaining.
+     * @throws {Error} When standard input and output are not interactive TTYs.
+     */
     open(): this
     {
         if (!TerminalInputStream.isSupported)
@@ -45,7 +55,18 @@ export class TerminalInputStream implements TerminalStream<string>
         return this;
     }
 
-    /** Returns the next character without consuming it. */
+    /**
+     * Returns the next character without consuming it.
+     *
+     * @returns A buffered character immediately, a promise while open and waiting for input, or `undefined` when closed.
+     * @example
+     * ```ts
+     * const stream = new TerminalInputStream().open();
+     * stream.peek(); // "a" when input is buffered
+     * stream.peek(); // Promise<string | undefined> while open and waiting
+     * stream.close(); stream.peek(); // undefined
+     * ```
+     */
     peek(): string | Promise<string | undefined> | undefined
     {
         if (this.buffer.length)
@@ -54,7 +75,18 @@ export class TerminalInputStream implements TerminalStream<string>
         return this.isOpen ? this.nextValue(false) : undefined;
     }
 
-    /** Reads and consumes a single character. */
+    /**
+     * Reads and consumes a single character.
+     *
+     * @returns A buffered character immediately, a promise while open and waiting for input, or `undefined` when closed.
+     * @example
+     * ```ts
+     * const stream = new TerminalInputStream().open();
+     * stream.read(); // "a" when input is buffered
+     * stream.read(); // Promise<string | undefined> while open and waiting
+     * stream.close(); stream.read(); // undefined
+     * ```
+     */
     read(): string | Promise<string | undefined> | undefined
     {
         if (this.buffer.length)
@@ -63,6 +95,7 @@ export class TerminalInputStream implements TerminalStream<string>
         return this.isOpen ? this.nextValue(true) : undefined;
     }
 
+    /** Disables raw input and terminal mouse reporting, then clears buffered input. */
     async close()
     {
         if (!this.isOpen)
@@ -82,6 +115,12 @@ export class TerminalInputStream implements TerminalStream<string>
         this.buffer = [];
     }
 
+    /**
+     * Iterates over characters until the stream closes, then closes it if iteration ends early.
+     *
+     * @returns An asynchronous iterator of raw terminal characters.
+     * @throws {Error} When the stream is closed.
+     */
     async *[Symbol.asyncIterator](): AsyncIterator<string>
     {
         if (!this.isOpen)

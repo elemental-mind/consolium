@@ -1,7 +1,20 @@
 import { Colors, mapColorToEscapeCodeSequence, type Color, type ColorValue, type HexColor } from "./color.ts";
 import { TextStyles, type TextStyle } from "./textStyle.ts";
 
+/**
+ * Fluent ANSI formatting properties and custom-colour tag functions.
+ *
+ * The API includes named foreground and background colours, text styles, and
+ * the `fg`/`bg` tagged templates for hexadecimal RGB colours.
+ *
+ * @example
+ * ```ts
+ * Formatting.bold.blue;
+ * Formatting.fg`#0af`;
+ * ```
+ */
 export type FormattingAPI = ForegroundColoursAPI & BackgroundColoursAPI & CustomColoursAPI & StylesAPI;
+/** Fluent formatting API augmented with internal formatting settings. */
 export type FormattingWithInternalAPI = {
     [K in keyof FormattingAPI]: FormattingAPI[K] extends FormattingAPI ? FormattingWithInternalAPI
     : FormattingAPI[K] extends ((...args: infer Arguments) => infer Result extends FormattingAPI) ? ((...args: Arguments) => FormattingWithInternalAPI)
@@ -23,17 +36,28 @@ type StylesAPI = {
 };
 type ColourCodeStringLiteral = (strings: TemplateStringsArray, ...substitutions: (string | number)[]) => FormattingAPI;
 
+/** Individual foreground, background, and text-style settings. */
 export interface FormattingInfo
 {
+    /** Foreground named or hexadecimal RGB colour. */
     foreground?: ColorValue;
+    /** Background named or hexadecimal RGB colour. */
     background?: ColorValue;
+    /** Whether text is bold. */
     bold?: boolean;
+    /** Whether text is dimmed. */
     dimmed?: boolean;
+    /** Whether text is italic. */
     italic?: boolean;
+    /** Whether text is underlined. */
     underlined?: boolean;
+    /** Whether text blinks. */
     blinking?: boolean;
+    /** Whether foreground and background colours are inverted. */
     inverted?: boolean;
+    /** Whether text is hidden. */
     hidden?: boolean;
+    /** Whether text has a strikethrough. */
     strikethrough?: boolean;
 }
 
@@ -72,25 +96,56 @@ const FluentFormattingAPIBase = class FluentBase
     }
 } as any as new () => (ForegroundColoursAPI & BackgroundColoursAPI & StylesAPI);
 
+/** Stateful formatting object used to build and apply ANSI settings. */
 export class FormattingSettings extends FluentFormattingAPIBase
 {
+    /** A formatting instance with no ANSI settings. */
     static None: FormattingSettings = new FormattingSettings();
 
+    /**
+     * Creates formatting with a custom hexadecimal foreground colour.
+     *
+     * @param strings - Template literal segments containing a three- or six-digit hexadecimal colour.
+     * @param substitutions - Values interpolated into the template literal.
+     * @returns A fluent formatting API with the selected foreground colour.
+     * @example
+     * FormattingSettings.fg`#0af`;
+     * FormattingSettings.fg`#${"00aaff"}`;
+     * FormattingSettings.fg`#${255}`;
+     */
     static fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return new FormattingSettings().fg(strings, ...substitutions);
     }
 
+    /**
+     * Creates formatting with a custom hexadecimal background colour.
+     *
+     * @param strings - Template literal segments containing a three- or six-digit hexadecimal colour.
+     * @param substitutions - Values interpolated into the template literal.
+     * @returns A fluent formatting API with the selected background colour.
+     * @example
+     * FormattingSettings.bg`#0af`;
+     * FormattingSettings.bg`#${"00aaff"}`;
+     * FormattingSettings.bg`#${255}`;
+     */
     static bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return new FormattingSettings().bg(strings, ...substitutions);
     }
 
+    /** The ANSI settings represented by this instance. */
     settings: FormattingInfo = {};
+    /** Whether this instance currently has no enabled formatting. */
     isNullFormatting: boolean = true;
 
     private shouldCloneOnChange = true;
 
+    /**
+     * Creates a formatting instance from settings.
+     *
+     * @param settings - Initial foreground, background, and text-style settings.
+     */
     constructor(settings: FormattingInfo = {})
     {
         super();
@@ -98,16 +153,47 @@ export class FormattingSettings extends FluentFormattingAPIBase
         this.isNullFormatting = this.checkForNullFormatting();
     }
 
+    /**
+     * Adds a custom hexadecimal foreground colour.
+     *
+     * @param strings - Template literal segments containing a three- or six-digit hexadecimal colour.
+     * @param substitutions - Values interpolated into the template literal.
+     * @returns A fluent formatting API with the merged foreground colour.
+     * @example
+     * Formatting.bold.fg`#0af`;
+     * Formatting.bold.fg`#${"00aaff"}`;
+     * Formatting.bold.fg`#${255}`;
+     */
     fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return this.addSettings({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
+    /**
+     * Adds a custom hexadecimal background colour.
+     *
+     * @param strings - Template literal segments containing a three- or six-digit hexadecimal colour.
+     * @param substitutions - Values interpolated into the template literal.
+     * @returns A fluent formatting API with the merged background colour.
+     * @example
+     * Formatting.bold.bg`#0af`;
+     * Formatting.bold.bg`#${"00aaff"}`;
+     * Formatting.bold.bg`#${255}`;
+     */
     bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return this.addSettings({ background: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
+    /**
+     * Merges this instance's settings with another instance or a settings object.
+     *
+     * @param overrideFormatting - An existing formatting instance or settings to override on this instance.
+     * @returns A derived formatting instance containing the merged settings.
+     * @example
+     * Formatting.red.createdDerivedFormattingFromMerged(Formatting.bold);
+     * Formatting.red.createdDerivedFormattingFromMerged({ bold: true });
+     */
     createdDerivedFormattingFromMerged(overrideFormatting: FormattingSettings | FormattingInfo): FormattingSettings
     {
         const overrides = overrideFormatting instanceof FormattingSettings ? overrideFormatting.settings : overrideFormatting;
@@ -117,6 +203,12 @@ export class FormattingSettings extends FluentFormattingAPIBase
         return mergedFormatting;
     }
 
+    /**
+     * Wraps text in this instance's ANSI escape sequences.
+     *
+     * @param value - Text to format.
+     * @returns The formatted text, or the original value when no settings are enabled.
+     */
     format(value: string): string
     {
         if (this.isNullFormatting)
@@ -134,6 +226,12 @@ export class FormattingSettings extends FluentFormattingAPIBase
         return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
     }
 
+    /**
+     * Adds settings to this fluent chain.
+     *
+     * @param settings - Settings to merge into the chain.
+     * @returns A derived chain or this mutable derived instance.
+     */
     addSettings(settings: FormattingInfo): FormattingSettings
     {
         if (this.shouldCloneOnChange)
@@ -171,4 +269,11 @@ export class FormattingSettings extends FluentFormattingAPIBase
     }
 };
 
+/**
+ * Entry point for composable ANSI formatting.
+ *
+ * @example
+ * Formatting.bold.red.format("Error");
+ * Formatting.fg`#0af`.bg`#111`.format("Custom colours");
+ */
 export const Formatting = FormattingSettings as any as FormattingAPI;
