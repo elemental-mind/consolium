@@ -1,6 +1,6 @@
 {
   "name": "consolium",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Lightweight TypeScript toolkit for terminal input, ANSI formatting, responsive layouts, frames, and tables.",
   "keywords": [
     "terminal",
