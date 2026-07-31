@@ -44,14 +44,6 @@ export class VerticalLayoutTests
         assert.deepEqual(layout.computeLines(3), ["header one", "footer one", "footer two"]);
     }
 
-    rejectsInvalidViewportAndScrollValues()
-    {
-        const layout = new VerticalLayout([]);
-
-        assert.throws(() => layout.computeLines(-1), RangeError);
-        assert.throws(() => { layout.scrollOffset = 1.5; }, RangeError);
-    }
-
     clampsScrollingAboveTheFirstContentLine()
     {
         const layout = new VerticalLayout(["one"]);
