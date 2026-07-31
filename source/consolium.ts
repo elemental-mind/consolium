@@ -83,10 +83,10 @@ export class Terminal extends EventEmitter
         this.color = options.color ?? "auto";
     }
 
-    get width() { return this.readDimension(this.output.columns, this.fallbackSize.width); }
-    get height() { return this.readDimension(this.output.rows, this.fallbackSize.height); }
-    get isInteractive() { return this.output.isTTY === true; }
-    get isInputActive() { return this.inputForwardingTask !== undefined; }
+    get width(): number { return this.readDimension(this.output.columns, this.fallbackSize.width); }
+    get height(): number { return this.readDimension(this.output.rows, this.fallbackSize.height); }
+    get isInteractive(): boolean { return this.output.isTTY === true; }
+    get isInputActive(): boolean { return this.inputForwardingTask !== undefined; }
 
     on<EventName extends keyof TerminalEventMap>(event: EventName, listener: (event: TerminalEventMap[EventName]) => void): this;
     override on(event: string | symbol, listener: (...arguments_: any[]) => void): this;

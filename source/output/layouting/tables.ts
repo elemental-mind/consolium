@@ -117,7 +117,7 @@ export class Table<EntryType>
         this.footerData = footerData;
     }
 
-    get emptyWidth()
+    get emptyWidth(): number
     {
         return this.renderer.border.getRequiredCellSeparatorSpace(this.columns.length) + this.columns.reduce((total, column) => total + column.paddingSize, 0);
     }
@@ -326,7 +326,7 @@ class TableColumn<EntryType>
         this.truncator = definition.cellOptions?.overflow?.truncate ?? DefaultTruncationMarker;
     }
 
-    get isFlexible()
+    get isFlexible(): boolean
     {
         return this.maximumWidth > this.minimumWidth;
     }
@@ -472,15 +472,15 @@ class TableRenderer
 
 export class TableBorder
 {
-    static readonly None = new TableBorder();
-    static readonly Sharp = new TableBorder({
+    static readonly None: TableBorder = new TableBorder();
+    static readonly Sharp: TableBorder = new TableBorder({
         top: { left: "┌", join: "┬", right: "┐" },
         middle: { left: "├", join: "┼", right: "┤" },
         bottom: { left: "└", join: "┴", right: "┘" },
         horizontal: "─",
         vertical: "│",
     });
-    static readonly Rounded = new TableBorder({
+    static readonly Rounded: TableBorder = new TableBorder({
         top: { left: "╭", join: "┬", right: "╮" },
         middle: { left: "├", join: "┼", right: "┤" },
         bottom: { left: "╰", join: "┴", right: "╯" },
@@ -499,7 +499,7 @@ export class TableBorder
         this.style = borderCharacters?.style as FormattingSettings ?? FormattingSettings.None;
     }
 
-    withStyle(style: FormattingAPI | undefined)
+    withStyle(style: FormattingAPI | undefined): TableBorder
     {
         if (!style || !this.definition) return this;
 
@@ -509,19 +509,19 @@ export class TableBorder
         });
     }
 
-    getRequiredCellSeparatorSpace(columnCount: number)
+    getRequiredCellSeparatorSpace(columnCount: number): number
     {
         return this.isVisible && columnCount > 0 ? columnCount + 1 : 0;
     }
 
-    renderCellsWithCellSeparators(cells: string[])
+    renderCellsWithCellSeparators(cells: string[]): string
     {
         if (!this.isVisible) return cells.join("");
         const verticalBorder = this.style.format(this.definition!.vertical);
         return verticalBorder + cells.join(verticalBorder) + verticalBorder;
     }
 
-    renderHorizontalLine(position: "top" | "middle" | "bottom", columns: TableColumn<any>[], contentWidths: number[])
+    renderHorizontalLine(position: "top" | "middle" | "bottom", columns: TableColumn<any>[], contentWidths: number[]): string | undefined
     {
         if (!this.isVisible || columns.length === 0) return undefined;
 

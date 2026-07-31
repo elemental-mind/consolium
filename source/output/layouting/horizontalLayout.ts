@@ -30,7 +30,7 @@ export class HorizontalLayout
         this.parseFormattingFrame(lineDefinition, FormattingSettings.None);
     }
 
-    get unformattedWidth()
+    get unformattedWidth(): number
     {
         return this.cumulativeStringLengths.at(-1)!;
     }
@@ -219,22 +219,22 @@ export class Range<RangeType extends Range<RangeType>>
         this.startIndex = layout.normalizedStrings.length;
     }
 
-    get endIndex()
+    get endIndex(): number
     {
         return this.next?.startIndex ?? this.layout.normalizedStrings.length;
     }
 
-    get isEmpty()
+    get isEmpty(): boolean
     {
         return this.endIndex === this.startIndex;
     }
 
-    get baseLength()
+    get baseLength(): number
     {
         return this.layout.cumulativeStringLengths[this.endIndex] - this.layout.cumulativeStringLengths[this.startIndex];
     }
 
-    protected append(range: RangeType, ranges: RangeType[])
+    protected append(range: RangeType, ranges: RangeType[]): RangeType
     {
         this.next = range;
         ranges.push(range);
@@ -242,7 +242,7 @@ export class Range<RangeType extends Range<RangeType>>
     }
 
     /** Reuses this range when it is still empty, otherwise links in a new range created by the factory. */
-    protected appendOrReuse(ranges: RangeType[], createRange: () => RangeType)
+    protected appendOrReuse(ranges: RangeType[], createRange: () => RangeType): this | RangeType
     {
         return this.isEmpty ? this : this.append(createRange(), ranges);
     }
@@ -258,14 +258,14 @@ export class FormattingRange extends Range<FormattingRange>
         this.formatting = formatting;
     }
 
-    appendRange(formatting: FormattingSettings)
+    appendRange(formatting: FormattingSettings): this | FormattingRange
     {
         const range = this.appendOrReuse(this.layout.formattingRanges, () => new FormattingRange(this.layout, formatting));
         range.formatting = formatting; // only changes anything when the current range was reused
         return range;
     }
 
-    getFormattedString(strings: string[])
+    getFormattedString(strings: string[]): string
     {
         const text = strings.slice(this.startIndex, this.endIndex).join("");
 
@@ -278,7 +278,7 @@ export class FlexRange extends Range<FlexRange>
     truncator?: ShrinkContext;
     filler?: GrowthContext;
 
-    get truncationCapacity()
+    get truncationCapacity(): number
     {
         if (!this.truncator) return 0;
 
@@ -286,12 +286,12 @@ export class FlexRange extends Range<FlexRange>
         return Math.max(0, this.baseLength - preservedLength);
     }
 
-    get contentImportance()
+    get contentImportance(): number
     {
         return this.truncator?.contentImportance ?? 0;
     }
 
-    appendRange()
+    appendRange(): this | FlexRange
     {
         return this.appendOrReuse(this.layout.flexRanges, () => new FlexRange(this.layout));
     }
@@ -303,7 +303,7 @@ export class FlexRange extends Range<FlexRange>
         this.truncator = truncator;
     }
 
-    grow(growthTarget: string[], growBy: number)
+    grow(growthTarget: string[], growBy: number): number
     {
         const filler = this.filler!;
         const possibleGrowth = Math.min(growBy, filler.max ?? Infinity);
@@ -313,7 +313,7 @@ export class FlexRange extends Range<FlexRange>
         return possibleGrowth;
     }
 
-    truncate(truncationTarget: string[], truncateBy: number)
+    truncate(truncationTarget: string[], truncateBy: number): number
     {
         const possibleTruncation = Math.min(truncateBy, this.truncationCapacity);
         if (possibleTruncation === 0) return 0;

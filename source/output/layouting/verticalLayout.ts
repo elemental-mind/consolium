@@ -31,7 +31,7 @@ export class VerticalLayout
         this.scrollOffset = options.scrollOffset ?? 0;
     }
 
-    get scrollOffset() { return this.currentScrollOffset; }
+    get scrollOffset(): number { return this.currentScrollOffset; }
     set scrollOffset(value: number)
     {
         this.currentScrollOffset = Math.max(0, Math.trunc(value));

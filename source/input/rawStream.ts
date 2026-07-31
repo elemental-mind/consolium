@@ -3,7 +3,7 @@ import type { TerminalStream } from "./api.ts";
 
 export class TerminalInputStream implements TerminalStream<string>
 {
-    static get isSupported()
+    static get isSupported(): boolean
     {
         return process.stdin.isTTY === true && process.stdout.isTTY === true;
     }
@@ -16,17 +16,17 @@ export class TerminalInputStream implements TerminalStream<string>
     private nextValuePromise: PromiseWithResolvers<string | undefined> | null = null;
     private valuePromiseAwaiterIsConsumingChar: boolean = false;
 
-    get isOpen()
+    get isOpen(): boolean
     {
         return this.decoder !== undefined;
     }
 
-    get hasBufferedInput()
+    get hasBufferedInput(): boolean
     {
         return this.buffer.length > 0;
     }
 
-    open()
+    open(): this
     {
         if (!TerminalInputStream.isSupported)
             throw new Error("TerminalInputStream requires an interactive TTY for stdin and stdout.");
@@ -46,7 +46,7 @@ export class TerminalInputStream implements TerminalStream<string>
     }
 
     /** Returns the next character without consuming it. */
-    peek()
+    peek(): string | Promise<string | undefined> | undefined
     {
         if (this.buffer.length)
             return this.buffer[0];
@@ -55,7 +55,7 @@ export class TerminalInputStream implements TerminalStream<string>
     }
 
     /** Reads and consumes a single character. */
-    read()
+    read(): string | Promise<string | undefined> | undefined
     {
         if (this.buffer.length)
             return this.buffer.shift()!;

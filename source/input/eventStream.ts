@@ -11,7 +11,7 @@ import type { BitField } from "../utils/bitField.ts";
 
 export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
 {
-    static get isSupported()
+    static get isSupported(): boolean
     {
         return TerminalInputStream.isSupported;
     }
@@ -20,9 +20,9 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
     private eventDecoder = new TerminalEventDecoder();
     private eventStream?: AsyncGenerator<TerminalInputEvent, void>;
 
-    get isOpen() { return this.eventStream !== undefined; }
+    get isOpen(): boolean { return this.eventStream !== undefined; }
 
-    open()
+    open(): this
     {
         if (!TerminalEventStream.isSupported)
             throw new Error("TerminalEventStream requires an interactive TTY for stdin and stdout.");
@@ -38,7 +38,7 @@ export class TerminalEventStream implements TerminalStream<TerminalInputEvent>
     }
 
     /** Reads and consumes a single terminal event. */
-    async read()
+    async read(): Promise<TerminalInputEvent | undefined>
     {
         if (!this.eventStream)
             return undefined;

@@ -2,6 +2,14 @@ import type { BitField, BitFlag } from "../../utils/bitField.ts";
 
 export type MouseButtonNames = "None" | "Left" | "Middle" | "Right";
 
+type MouseButtonAPI = {
+    readonly None: -1;
+    readonly Left: 0;
+    readonly Middle: 1;
+    readonly Right: 2;
+    readonly fromXtermCode: (xtermCode: number) => number;
+};
+
 /**
  * Mouse button enum:
  * ```text
@@ -9,8 +17,8 @@ export type MouseButtonNames = "None" | "Left" | "Middle" | "Right";
  *  -1     0      1      2
  * ```
  */
-export type MouseButton = typeof MouseButton[MouseButtonNames];
-export const MouseButton =
+export type MouseButton = MouseButtonAPI[MouseButtonNames];
+export const MouseButton: MouseButtonAPI =
     {
         None: -1,
         Left: 0,
@@ -38,8 +46,15 @@ export const MouseButton =
  * ```
  */
 export type MouseButtonFlags = BitField;
-export type MouseButtonFlag = typeof MouseButtonFlag[MouseButtonNames];
-export const MouseButtonFlag =
+type MouseButtonFlagAPI = {
+    readonly None: BitFlag;
+    readonly Left: BitFlag;
+    readonly Middle: BitFlag;
+    readonly Right: BitFlag;
+    readonly fromButtonCode: (button: MouseButton) => BitFlag;
+};
+export type MouseButtonFlag = MouseButtonFlagAPI[MouseButtonNames];
+export const MouseButtonFlag: MouseButtonFlagAPI =
     {
         None: 0b000 as BitFlag,
         Left: 0b001 as BitFlag,

@@ -74,14 +74,14 @@ const FluentFormattingAPIBase = class FluentBase
 
 export class FormattingSettings extends FluentFormattingAPIBase
 {
-    static None = new FormattingSettings();
+    static None: FormattingSettings = new FormattingSettings();
 
-    static fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    static fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return new FormattingSettings().fg(strings, ...substitutions);
     }
 
-    static bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    static bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return new FormattingSettings().bg(strings, ...substitutions);
     }
@@ -98,17 +98,17 @@ export class FormattingSettings extends FluentFormattingAPIBase
         this.isNullFormatting = this.checkForNullFormatting();
     }
 
-    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    fg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return this.addSettings({ foreground: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
-    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[])
+    bg(strings: TemplateStringsArray, ...substitutions: (string | number)[]): FormattingAPI
     {
         return this.addSettings({ background: this.getColorStringFromStringLiteral(strings, substitutions) }) as any as FormattingAPI;
     }
 
-    createdDerivedFormattingFromMerged(overrideFormatting: FormattingSettings | FormattingInfo)
+    createdDerivedFormattingFromMerged(overrideFormatting: FormattingSettings | FormattingInfo): FormattingSettings
     {
         const overrides = overrideFormatting instanceof FormattingSettings ? overrideFormatting.settings : overrideFormatting;
 
@@ -117,7 +117,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
         return mergedFormatting;
     }
 
-    format(value: string)
+    format(value: string): string
     {
         if (this.isNullFormatting)
             return value;
@@ -134,7 +134,7 @@ export class FormattingSettings extends FluentFormattingAPIBase
         return `\u001B[${escapeCodes.join(";")}m${value}\u001B[0m`;
     }
 
-    addSettings(settings: FormattingInfo)
+    addSettings(settings: FormattingInfo): FormattingSettings
     {
         if (this.shouldCloneOnChange)
         {

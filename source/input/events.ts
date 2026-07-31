@@ -33,9 +33,9 @@ export abstract class TerminalEvent implements ModifierInfo
     abstract readonly type: string;
     private readonly modifierKeys: ModifierKeyFlags;
 
-    get altKey() { return (this.modifierKeys & TerminalEvent.altKeyBit) !== 0; }
-    get ctrlKey() { return (this.modifierKeys & TerminalEvent.ctrlKeyBit) !== 0; }
-    get shiftKey() { return (this.modifierKeys & TerminalEvent.shiftKeyBit) !== 0; }
+    get altKey(): boolean { return (this.modifierKeys & TerminalEvent.altKeyBit) !== 0; }
+    get ctrlKey(): boolean { return (this.modifierKeys & TerminalEvent.ctrlKeyBit) !== 0; }
+    get shiftKey(): boolean { return (this.modifierKeys & TerminalEvent.shiftKeyBit) !== 0; }
 
     protected constructor(modifiers: Partial<ModifierInfo> = {})
     {
@@ -102,9 +102,9 @@ export class TerminalMouseEvent<Type extends TerminalMouseEventType> extends Ter
     readonly column: number;
     readonly row: number;
 
-    get leftMouseButton() { return (this.buttons & TerminalMouseEvent.leftMouseButtonBit) !== 0; }
-    get middleMouseButton() { return (this.buttons & TerminalMouseEvent.middleMouseButtonBit) !== 0; }
-    get rightMouseButton() { return (this.buttons & TerminalMouseEvent.rightMouseButtonBit) !== 0; }
+    get leftMouseButton(): boolean { return (this.buttons & TerminalMouseEvent.leftMouseButtonBit) !== 0; }
+    get middleMouseButton(): boolean { return (this.buttons & TerminalMouseEvent.middleMouseButtonBit) !== 0; }
+    get rightMouseButton(): boolean { return (this.buttons & TerminalMouseEvent.rightMouseButtonBit) !== 0; }
 
     constructor(type: Type, init: Partial<MouseEventInfo> = {})
     {

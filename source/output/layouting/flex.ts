@@ -139,7 +139,7 @@ export class ShrinkContext implements FlexShrinkConfiguration
             throw new RangeError("The truncator cannot be longer than the preserved content.");
     }
 
-    shrink(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, currentWidth: number, shrinkBy: number)
+    shrink(truncationTarget: string[], startIndexInclusive: number, endIndexExclusive: number, currentWidth: number, shrinkBy: number): string[] | undefined
     {
         if (startIndexInclusive === endIndexExclusive) return;
 
@@ -190,7 +190,7 @@ export class GrowthContext implements FlexGrowConfiguration
             throw new Error("Filler not valid.");
     }
 
-    fill(length: number)
+    fill(length: number): string
     {
         if (typeof this.filler === "function")
             return this.filler(length);
