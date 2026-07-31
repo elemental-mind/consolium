@@ -338,10 +338,14 @@ and make the first element of the array a formatting instruction/set based on
 the fluent formatting API of Consolium:
 
 ```ts
-import { bgBlack, green } from "consolium/output";
+import { bgBlack, green } from "consolium/formatting";
 
 const formattedText = [green.bold, "passed"];
 ```
+
+Every named colour, background colour, and text style is exported from
+`consolium/formatting`. You can also import the complete module with
+`import * as formatting from "consolium/formatting"`.
 
 Formatting can be nested - preserving unset properties of the parent context.
 The following would render everything on a black background, but "build: " in
