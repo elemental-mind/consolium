@@ -50,10 +50,9 @@ terminal.writeLine(statusLine);
 if (terminal.isInteractive)
     terminal.clearViewport();
 
-// onResize() does not redraw automatically. It returns a disposable subscription
-// so a long-lived Terminal does not retain callbacks after an interactive view
-// has ended.
-using resizeLogger = terminal.onResize(({ width, height }: TerminalSize) =>
+// Resize events do not redraw automatically. Remove listeners when a long-lived
+// Terminal no longer needs them.
+terminal.on("resize", ({ width, height }: TerminalSize) =>
 {
     terminal.writeLine([gray, `Viewport changed to ${width} x ${height}`]);
 });
@@ -72,11 +71,17 @@ async function showCopyProgress(files): Promise<void>
 
     using screenDisposeHandle = terminal.alternateScreen({ hideCursor: true });
     using renderLoopHandle = setInterval(render, 100);
-    using resizeSubscriptionHandle = terminal.onResize(render);
+    terminal.on("resize", render);
 
-    render();
-
-    await copyFiles(files, writeFrame);
+    try
+    {
+        render();
+        await copyFiles(files, writeFrame);
+    }
+    finally
+    {
+        terminal.off("resize", render);
+    }
 }
 
 // A frame has a content section and optional header and footer sections, each

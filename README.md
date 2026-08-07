@@ -145,7 +145,7 @@ whether the `Terminal` output is a TTY.
 
 Consolium allows `write()` and `writeLine()` for any output, but requires an
 interactive TTY for screen-changing operations such as `writeFrame()`,
-`clearViewport()`, `alternateScreen()`, and `onResize()`. Terminal input
+`clearViewport()`, `alternateScreen()`, and resize listeners. Terminal input
 requires both stdin and stdout to be TTYs: stdin carries the reported events,
 while stdout carries the control sequences that enable and disable mouse
 reporting.
@@ -554,10 +554,10 @@ try {
 | `clearFrame(): void`                    | Clears the area occupied by the last frame. It does nothing before a frame has been written.                                                                                                                             |
 | `clearViewport(): void`                 | Clears the terminal viewport, moves the cursor home, and resets frame tracking.                                                                                                                                          |
 | `alternateScreen(options?): Disposable` | Enters the alternate screen. `hideCursor?: boolean` also hides the cursor. Disposing restores the cursor and primary screen; disposal is idempotent.                                                                     |
-| `onResize(listener): Disposable`        | Calls `listener({ width, height })` on output resize events. Dispose the returned object to unsubscribe.                                                                                                                 |
+| `on("resize", listener)`               | Calls `listener({ width, height })` on output resize events. Use `off()` or `removeListener()` to unsubscribe.                                                                                                          |
 
 These methods require `isInteractive === true` (except a no-op `clearFrame()`).
-`onResize()` additionally requires the output to implement
+`on("resize", listener)` additionally requires the output to implement
 `on("resize", listener)`.
 
 `Disposable` has one method, `[Symbol.dispose](): void`, so modern TypeScript
@@ -565,7 +565,11 @@ can also manage these resources with `using`.
 
 ```ts
 using screen = terminal.alternateScreen({ hideCursor: true });
-using resizeSubscription = terminal.onResize(() => terminal.writeFrame(layout));
+const render = () => terminal.writeFrame(layout);
+terminal.on("resize", render);
+
+// When the interactive view ends:
+terminal.off("resize", render);
 ```
 
 ## `consolium/input`

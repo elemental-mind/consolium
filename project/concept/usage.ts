@@ -47,10 +47,17 @@ async function useOutputs()
 
     using screen = terminal.alternateScreen({ hideCursor: true });
     using renderLoop = setInterval(render, 100);
-    using resizer = terminal.onResize(render);
+    terminal.on("resize", render);
 
-    render();
-    await files.copyEnd;
+    try
+    {
+        render();
+        await files.copyEnd;
+    }
+    finally
+    {
+        terminal.off("resize", render);
+    }
 
     terminal.writeLine(green.bold`All files copied`);
 }

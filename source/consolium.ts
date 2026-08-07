@@ -49,6 +49,9 @@ export interface TerminalInputEventSource extends TerminalStream<TerminalInputEv
 /** Event names emitted by {@link Terminal}, mapped to their event payloads. */
 export interface TerminalEventMap
 {
+    /** The current dimensions after the output terminal has been resized. */
+    resize: TerminalSize;
+
     /** A key press, including named keys such as `ArrowUp`. */
     keypress: TerminalKeyboardEvent;
 
@@ -112,7 +115,6 @@ export interface Disposable
 
 const defaultSize: TerminalSize = { width: 80, height: 24 };
 const ansiEscapeSequence = /\u001B\[[0-?]*[ -/]*[@-~]/g;
-const inputEventNames = new Set<keyof TerminalEventMap>(["keypress", "mousedown", "mouseup", "mousemove", "wheel", "csi", "ss3"]);
 
 /**
  * Coordinates terminal output, responsive frame rendering, and decoded input
@@ -132,7 +134,9 @@ export class Terminal extends EventEmitter
 
     private readonly output: TerminalOutput;
     private readonly input: TerminalInputEventSource;
-    private inputForwardingTask?: Promise<void>;
+
+    private inputEventForwarder?: Promise<void>;
+    private resizeEventForwarder?: () => void;
 
     /** Creates a terminal controller using the supplied streams and options. */
     constructor(options: TerminalOptions = {})
@@ -154,14 +158,15 @@ export class Terminal extends EventEmitter
     get isInteractive(): boolean { return this.output.isTTY === true; }
 
     /** Whether decoded input events are currently being forwarded. */
-    get isInputActive(): boolean { return this.inputForwardingTask !== undefined; }
+    get isInputActive(): boolean { return this.inputEventForwarder !== undefined; }
 
     /**
-     * Registers a listener for a decoded terminal event and starts input
-     * forwarding when the listener is for an input event.
+     * Registers a terminal event listener. Input listeners start decoded input
+     * forwarding, while resize listeners observe the output stream.
      *
      * @example
      * ```ts
+     * terminal.on("resize", size => console.log(size.width, size.height));
      * terminal.on("keypress", event => console.log(event.key));
      * terminal.on("mousedown", event => console.log(event.column, event.row));
      * ```
@@ -172,16 +177,29 @@ export class Terminal extends EventEmitter
     {
         super.on(event, listener);
 
-        if (typeof event === "string" && inputEventNames.has(event as keyof TerminalEventMap))
-            try
+        try
+        {
+            switch (event)
             {
-                this.startInput();
+                case "resize":
+                    this.forwardResizeEvents();
+                    break;
+                case "keypress":
+                case "mousedown":
+                case "mouseup":
+                case "mousemove":
+                case "wheel":
+                case "csi":
+                case "ss3":
+                    this.startInput();
+                    break;
             }
-            catch (error)
-            {
-                super.off(event, listener);
-                throw error;
-            }
+        }
+        catch (error)
+        {
+            super.off(event, listener);
+            throw error;
+        }
 
         return this;
     }
@@ -189,22 +207,22 @@ export class Terminal extends EventEmitter
     /** Opens the decoded event stream and re-emits its events from this terminal. */
     startInput(): this
     {
-        if (this.inputForwardingTask)
+        if (this.inputEventForwarder)
             return this;
 
         this.input.open();
-        this.inputForwardingTask = this.forwardInputEvents();
+        this.inputEventForwarder = this.forwardInputEvents();
         return this;
     }
 
     /** Stops input forwarding and restores the input stream's terminal state. */
     async stopInput(): Promise<void>
     {
-        if (!this.inputForwardingTask)
+        if (!this.inputEventForwarder)
             return;
 
         await this.input.close();
-        await this.inputForwardingTask;
+        await this.inputEventForwarder;
     }
 
     /**
@@ -242,35 +260,6 @@ export class Terminal extends EventEmitter
         this.requireInteractive("clearViewport");
         this.output.write("\u001B[2J\u001B[H");
         this.frameLineCount = 0;
-    }
-
-    /**
-     * Subscribes to terminal resize events.
-     *
-     * @returns A disposable that removes the resize listener.
-     * @example
-     * ```ts
-     * using resize = terminal.onResize(size => console.log(size.width, size.height));
-     * ```
-     */
-    onResize(listener: (size: TerminalSize) => void): Disposable
-    {
-        this.requireInteractive("onResize");
-        if (!this.output.on)
-            throw new Error("onResize requires an output stream that supports resize events.");
-
-        const callback = () => listener({ width: this.width, height: this.height });
-        this.output.on("resize", callback);
-
-        let disposed = false;
-        return {
-            [Symbol.dispose]: () =>
-            {
-                if (disposed) return;
-                disposed = true;
-                this.output.off?.("resize", callback) ?? this.output.removeListener?.("resize", callback);
-            },
-        };
     }
 
     /**
@@ -400,6 +389,28 @@ export class Terminal extends EventEmitter
         return size;
     }
 
+    private forwardResizeEvents(): void
+    {
+        if (this.resizeEventForwarder)
+            return;
+
+        if (!this.output.on)
+            throw new Error("on(\"resize\") requires an output stream that supports resize events.");
+
+        this.resizeEventForwarder = (): void =>
+        {
+            if (this.listenerCount("resize"))
+                this.emit("resize", { width: this.width, height: this.height });
+            else
+            {
+                this.output.off!("resize", this.resizeEventForwarder!);
+                this.resizeEventForwarder = undefined;
+            }
+        };
+
+        this.output.on("resize", this.resizeEventForwarder!);
+    }
+
     private async forwardInputEvents(): Promise<void>
     {
         try
@@ -409,7 +420,7 @@ export class Terminal extends EventEmitter
         }
         finally
         {
-            this.inputForwardingTask = undefined;
+            this.inputEventForwarder = undefined;
         }
     }
 }
