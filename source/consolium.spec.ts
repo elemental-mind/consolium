@@ -82,10 +82,10 @@ export class TerminalTests
         const terminal = new Terminal({ output: new FakeOutput(), input });
         const received: string[] = [];
 
-        terminal.on("keyPress", event => received.push(`${event.type}:${event.key}`));
-        terminal.on("mouseDown", event => received.push(event.type));
-        terminal.on("mouseUp", event => received.push(event.type));
-        terminal.on("mouseMove", event => received.push(event.type));
+        terminal.on("keypress", event => received.push(`${event.type}:${event.key}`));
+        terminal.on("mousedown", event => received.push(event.type));
+        terminal.on("mouseup", event => received.push(event.type));
+        terminal.on("mousemove", event => received.push(event.type));
         terminal.on("wheel", event => received.push(event.type));
         terminal.on("csi", event => received.push(event.type));
         terminal.on("ss3", event => received.push(event.type));
@@ -156,9 +156,17 @@ export class TerminalTests
         assert.throws(() => terminal.clearViewport(), /interactive TTY/);
         assert.throws(() => terminal.writeFrame([]), /interactive TTY/);
         assert.throws(() => terminal.alternateScreen(), /interactive TTY/);
+        assert.throws(() => terminal.on("resize", () => { }), /interactive TTY/);
     }
 
-    managesResizeSubscriptionsAndAlternateScreenLifetime()
+    validatesResizeEventSupport()
+    {
+        const terminal = new Terminal({ output: new FakeOutputWithoutResizeEvents() });
+
+        assert.throws(() => terminal.on("resize", () => { }), /supports resize events/);
+    }
+
+    forwardsResizeEventsAndCleansUpOutputListeners()
     {
         const output = new FakeOutput();
         output.isTTY = true;
@@ -166,19 +174,41 @@ export class TerminalTests
         output.rows = 5;
         const terminal = new Terminal({ output });
         const sizes: { width: number; height: number; }[] = [];
+        const firstListener = (size: { width: number; height: number; }) => sizes.push(size);
+        const secondListener = (size: { width: number; height: number; }) => sizes.push(size);
 
-        const subscription = terminal.onResize(size => sizes.push(size));
+        terminal.on("resize", firstListener);
+        terminal.once("resize", secondListener);
+        assert.equal(output.listenerCount("resize"), 1);
         output.columns = 25;
         output.emit("resize");
-        subscription[Symbol.dispose]();
+        assert.equal(output.listenerCount("resize"), 1);
+        terminal.off("resize", firstListener);
+        assert.equal(output.listenerCount("resize"), 0);
         output.columns = 30;
         output.emit("resize");
+
+        terminal.on("resize", firstListener);
+        terminal.removeListener("resize", firstListener);
+        assert.equal(output.listenerCount("resize"), 0);
+
+        terminal.on("resize", firstListener);
+        terminal.removeAllListeners("resize");
+        assert.equal(output.listenerCount("resize"), 0);
+
+        assert.deepEqual(sizes, [{ width: 25, height: 5 }, { width: 25, height: 5 }]);
+    }
+
+    managesAlternateScreenLifetime()
+    {
+        const output = new FakeOutput();
+        output.isTTY = true;
+        const terminal = new Terminal({ output });
 
         const screen = terminal.alternateScreen({ hideCursor: true });
         screen[Symbol.dispose]();
         screen[Symbol.dispose]();
 
-        assert.deepEqual(sizes, [{ width: 25, height: 5 }]);
         assert.equal(output.written, "\u001B[?1049h\u001B[?25l\u001B[?25h\u001B[?1049l");
     }
 

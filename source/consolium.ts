@@ -50,16 +50,16 @@ export interface TerminalInputEventSource extends TerminalStream<TerminalInputEv
 export interface TerminalEventMap
 {
     /** A key press, including named keys such as `ArrowUp`. */
-    keyPress: TerminalKeyboardEvent;
+    keypress: TerminalKeyboardEvent;
 
     /** A mouse-button press. */
-    mouseDown: TerminalMouseEvent<"mousedown">;
+    mousedown: TerminalMouseEvent<"mousedown">;
 
     /** A mouse-button release. */
-    mouseUp: TerminalMouseEvent<"mouseup">;
+    mouseup: TerminalMouseEvent<"mouseup">;
 
     /** A mouse movement event. */
-    mouseMove: TerminalMouseEvent<"mousemove">;
+    mousemove: TerminalMouseEvent<"mousemove">;
 
     /** A mouse-wheel event. */
     wheel: TerminalWheelEvent;
@@ -112,7 +112,7 @@ export interface Disposable
 
 const defaultSize: TerminalSize = { width: 80, height: 24 };
 const ansiEscapeSequence = /\u001B\[[0-?]*[ -/]*[@-~]/g;
-const inputEventNames = new Set<keyof TerminalEventMap>(["keyPress", "mouseDown", "mouseUp", "mouseMove", "wheel", "csi", "ss3"]);
+const inputEventNames = new Set<keyof TerminalEventMap>(["keypress", "mousedown", "mouseup", "mousemove", "wheel", "csi", "ss3"]);
 
 /**
  * Coordinates terminal output, responsive frame rendering, and decoded input
@@ -162,8 +162,8 @@ export class Terminal extends EventEmitter
      *
      * @example
      * ```ts
-     * terminal.on("keyPress", event => console.log(event.key));
-     * terminal.on("mouseDown", event => console.log(event.column, event.row));
+     * terminal.on("keypress", event => console.log(event.key));
+     * terminal.on("mousedown", event => console.log(event.column, event.row));
      * ```
      */
     on<EventName extends keyof TerminalEventMap>(event: EventName, listener: (event: TerminalEventMap[EventName]) => void): this;
@@ -405,25 +405,11 @@ export class Terminal extends EventEmitter
         try
         {
             for await (const event of this.input)
-                this.emitInputEvent(event);
+                this.emit(event.type, event);
         }
         finally
         {
             this.inputForwardingTask = undefined;
-        }
-    }
-
-    private emitInputEvent(event: TerminalInputEvent): void
-    {
-        switch (event.type)
-        {
-            case "keypress": this.emit("keyPress", event); break;
-            case "mousedown": this.emit("mouseDown", event); break;
-            case "mouseup": this.emit("mouseUp", event); break;
-            case "mousemove": this.emit("mouseMove", event); break;
-            case "wheel": this.emit("wheel", event); break;
-            case "csi": this.emit("csi", event); break;
-            case "ss3": this.emit("ss3", event); break;
         }
     }
 }

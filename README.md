@@ -24,9 +24,9 @@ import { Terminal } from "consolium";
 
 const terminal = new Terminal();
 
-terminal.on( "mouseDown", event =>
+terminal.on("mousedown", event =>
         terminal.writeLine(`Clicked column ${event.column}, row ${event.row}`));
-terminal.on("keyPress", event => 
+terminal.on("keypress", event => 
     if (event.ctrlKey && event.key === "c")
         terminal.writeLine("Interrupted"));
 ```
@@ -497,13 +497,13 @@ import { Terminal } from "consolium";
 
 const terminal = new Terminal();
 
-terminal.on("keyPress", (event) => {
+terminal.on("keypress", (event) => {
   if (event.ctrlKey && event.key === "c") {
     void terminal.stopInput();
   }
 });
 
-terminal.on("mouseDown", (event) => {
+terminal.on("mousedown", (event) => {
   terminal.writeLine(`button ${event.button} at ${event.column},${event.row}`);
 });
 ```
@@ -513,10 +513,10 @@ names and payloads are:
 
 | Event name  | Payload                           |
 | ----------- | --------------------------------- |
-| `keyPress`  | `TerminalKeyboardEvent`           |
-| `mouseDown` | `TerminalMouseEvent<"mousedown">` |
-| `mouseUp`   | `TerminalMouseEvent<"mouseup">`   |
-| `mouseMove` | `TerminalMouseEvent<"mousemove">` |
+| `keypress`  | `TerminalKeyboardEvent`           |
+| `mousedown` | `TerminalMouseEvent<"mousedown">` |
+| `mouseup`   | `TerminalMouseEvent<"mouseup">`   |
+| `mousemove` | `TerminalMouseEvent<"mousemove">` |
 | `wheel`     | `TerminalWheelEvent`              |
 | `csi`       | `CSIEvent`                        |
 | `ss3`       | `SS3Event`                        |
