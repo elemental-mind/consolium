@@ -10,8 +10,8 @@ export { Formatting } from "./formatting/formatting.ts";
 
 /** Types and class for responsive horizontal line layout. */
 export { type LineDefinition, HorizontalLayout } from "./layouting/horizontalLayout.ts";
-/** Class for viewport-aware vertical line layout. */
-export { VerticalLayout } from "./layouting/verticalLayout.ts";
+/** Class and types for viewport-aware vertical line layout. */
+export { VerticalLayout, type ScrollMarkerOptions, type TerminalLine, type VerticalLayoutOptions, type VerticalLayoutScrollMode } from "./layouting/verticalLayout.ts";
 
 /** Factory API for flexible growth and truncation boundaries. */
 export { Flex } from "./layouting/flex.ts";

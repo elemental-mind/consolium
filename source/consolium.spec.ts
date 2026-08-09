@@ -166,7 +166,6 @@ export class TerminalTests
         assert.throws(() => terminal.clearViewport(), /interactive TTY/);
         assert.throws(() => terminal.writeFrame([]), /interactive TTY/);
         assert.throws(() => terminal.alternateScreen(), /interactive TTY/);
-        assert.throws(() => terminal.on("resize", () => { }), /interactive TTY/);
     }
 
     validatesResizeEventSupport()
@@ -223,7 +222,7 @@ export class TerminalTests
         const terminal = new Terminal({ output });
 
         terminal.writeLine("before");
-        terminal.writeFrame(new VerticalLayout(["one", "two", "three"], { header: ["head"], footer: ["foot"] }));
+        terminal.writeFrame(new VerticalLayout({ content: ["one", "two", "three"], header: ["head"], footer: ["foot"] }));
         terminal.clearFrame();
 
         assert.equal(output.written, "before\nhead\none\ntwo\nfoot\r\u001B[3A\u001B[J");
@@ -237,7 +236,7 @@ export class TerminalTests
         output.rows = 4;
         const terminal = new Terminal({ output });
 
-        terminal.writeFrame(new VerticalLayout(["body"], { header: ["header"], footer: ["foot"] }));
+        terminal.writeFrame(new VerticalLayout({ content: ["body"], header: ["header"], footer: ["foot"] }));
 
         assert.equal(output.written, "hea…\nbody\n\nfoot");
     }

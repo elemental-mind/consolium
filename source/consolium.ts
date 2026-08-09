@@ -295,7 +295,7 @@ export class Terminal extends EventEmitter
      * @example
      * ```ts
      * terminal.writeFrame(["first", "second"]);
-     * terminal.writeFrame(new VerticalLayout(["scrollable"]));
+     * terminal.writeFrame(new VerticalLayout({ content: ["scrollable"] }));
      * ```
      */
     writeFrame(frame: readonly TerminalLine[] | VerticalLayout): void
@@ -303,7 +303,7 @@ export class Terminal extends EventEmitter
         this.requireInteractive("writeFrame");
         this.clearFrame();
 
-        const layout = frame instanceof VerticalLayout ? frame : new VerticalLayout(frame);
+        const layout = frame instanceof VerticalLayout ? frame : new VerticalLayout({ content: frame });
         const lines = layout.computeLines(this.height);
 
         const renderedFrame = lines

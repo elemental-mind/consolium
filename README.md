@@ -418,9 +418,10 @@ Short content is padded with blank rows, keeping the footer anchored to the
 bottom. If fixed sections exceed the viewport, the footer takes precedence and
 the available rows show the start of the header.
 
-Set `scrollOffset` or call `scrollBy()` to move through content, then pass the
-layout to `terminal.writeFrame(layout)`. Wiring up the scroll events etc. is
-deliberately left to your program and does not happen automatically.
+Set `scrollOffset`, or call `scrollBy()`, `scrollPage()`, `scrollTop()`, or
+`scrollBottom()` to move through content, then pass the layout to
+`terminal.writeFrame(layout)`. Wiring up the scroll events etc. is deliberately
+left to your program and does not happen automatically.
 
 # API
 
@@ -537,7 +538,8 @@ const terminal = new Terminal();
 const screen = terminal.alternateScreen({ hideCursor: true });
 
 try {
-  const layout = new VerticalLayout(["First row", "Second row"], {
+  const layout = new VerticalLayout({
+    content: ["First row", "Second row"],
     header: [[Formatting.bold, "Consolium"]],
     footer: ["Press Ctrl+C to exit"],
   });
@@ -774,24 +776,57 @@ interface FlexGrowConfiguration {
 ### `VerticalLayout`
 
 ```ts
+import { Terminal } from "consolium";
 import { VerticalLayout } from "consolium/output";
 
-const layout = new VerticalLayout(items, {
+const terminal = new Terminal();
+const layout = new VerticalLayout({
+  content: [],
   header: ["Items"],
-  footer: ["↑/↓ scroll"],
   scrollOffset: 0,
 });
 
-layout.scrollBy(1);
-const visibleLines = layout.computeLines(terminalHeight);
+function showItems(title: string, nextItems: readonly string[]) {
+  layout.header = [title];
+  layout.content = [...nextItems];
+  layout.scrollTop();
+  terminal.writeFrame(layout);
+}
+
+showItems("Search results", ["Alpha", "Beta", "Gamma"]);
+
+// Sections are mutable, so individual lines can also change in place.
+layout.header[0] = "Search results (4)";
+layout.content.push("Delta");
+terminal.writeFrame(layout);
 ```
 
-`content`, `header`, and `footer` are readonly arrays of `TerminalLine`.
-`scrollOffset` is normalized to a non-negative integer and may be read or set.
-`scrollBy(amount): this` adjusts it. `computeLines(height)` clamps the offset,
-keeps the footer at the bottom, keeps as much header as fits, slices the
-content, and fills unused content rows with empty lines. It returns exactly
-`height` lines for non-negative integer heights.
+All sections are optional, default to empty, and are mutable arrays of
+`TerminalLine`. Replace a section or mutate its array, then render the same
+layout again to display the latest lines. `scrollOffset` is clamped to a
+non-negative value and may be read or set. `scrollBy(amount)`,
+`scrollPage(direction)`, `scrollTop()`, and
+`scrollBottom()` are chainable. Scrolling beyond either end is discarded
+immediately. `scrollPage(direction)` moves past the content elements visible
+in the latest render, accounting for rows overwritten by markers. `scrollMode`
+defaults to `"scroll"`,
+which keeps the final content line at the bottom; `"overscroll"` permits it at
+the top. Conditional centered up/down markers are enabled by default. Set
+`scrollMarkers: false` to hide both, or replace and disable individual sides:
+
+```ts
+new VerticalLayout({
+  content: items,
+  scrollMarkers: { top: "↑ Earlier items ↑" },
+});
+```
+
+An omitted side of the object is hidden. Markers overwrite the
+first or last visible content row after slicing, so they do not change the
+underlying slice height or regular scrolling behavior.
+`computeLines(height)` keeps the footer at the bottom, keeps as much header as
+fits, slices content, and fills unused content rows with empty lines. It returns
+exactly the requested height in lines.
 
 ### `Table`
 
