@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import * as formatting from "./formatting.ts";
-import { bg, blue, bold, Formatting, green } from "./formatting.ts";
-import type { FormattingAPI, FormattingWithInternalAPI } from "./output/formatting/formatting.ts";
+import * as formatting from "./style.ts";
+import { bg, blue, bold, Formatting, green } from "./style.ts";
+import type { FormattingAPI, FormattingWithInternalAPI } from "./formatting/formatting.ts";
 
 const settingsOf = (formatting: FormattingAPI) => (formatting as FormattingWithInternalAPI).settings;
 

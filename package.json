@@ -35,8 +35,8 @@
       "import": "./distribution/npm/output/api.js"
     },
     "./formatting": {
-      "types": "./distribution/npm/formatting.d.ts",
-      "import": "./distribution/npm/formatting.js"
+      "types": "./distribution/npm/output/style.d.ts",
+      "import": "./distribution/npm/output/style.js"
     }
   },
   "author": "Magnus Meseck",

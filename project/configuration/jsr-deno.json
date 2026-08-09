@@ -17,6 +17,6 @@
     ".": "./source/consolium.ts",
     "./input": "./source/input/api.ts",
     "./output": "./source/output/api.ts",
-    "./formatting": "./source/formatting.ts"
+    "./formatting": "./source/output/style.ts"
   }
 }

@@ -5,12 +5,30 @@
  * @module
  */
 
-import { Formatting } from "./output/formatting/formatting.ts";
+import { Formatting } from "./formatting/formatting.ts";
 
 /** Composable ANSI formatting API. */
-export { Formatting } from "./output/formatting/formatting.ts";
+export { Formatting } from "./formatting/formatting.ts";
 /** Settings accepted when constructing or extending formatting. */
-export type { FormattingAPI, FormattingInfo } from "./output/formatting/formatting.ts";
+export type { FormattingAPI, FormattingInfo } from "./formatting/formatting.ts";
+
+/**
+ * Tagged template for a custom hexadecimal foreground colour.
+ *
+ * @example
+ * fg`#0af`;
+ * fg`#00aaff`;
+ */
+export const fg: typeof Formatting.fg = Formatting.fg;
+/**
+ * Tagged template for a custom hexadecimal background colour.
+ *
+ * @example
+ * bg`#0af`;
+ * bg`#00aaff`;
+ */
+export const bg: typeof Formatting.bg = Formatting.bg;
+
 
 /** Fluent formatting with a black foreground. */
 export const black: typeof Formatting.black = Formatting.black;
@@ -30,6 +48,8 @@ export const cyan: typeof Formatting.cyan = Formatting.cyan;
 export const white: typeof Formatting.white = Formatting.white;
 /** Fluent formatting with a gray foreground. */
 export const gray: typeof Formatting.gray = Formatting.gray;
+
+
 /** Fluent formatting with a black background. */
 export const bgBlack: typeof Formatting.bgBlack = Formatting.bgBlack;
 /** Fluent formatting with a red background. */
@@ -48,22 +68,8 @@ export const bgCyan: typeof Formatting.bgCyan = Formatting.bgCyan;
 export const bgWhite: typeof Formatting.bgWhite = Formatting.bgWhite;
 /** Fluent formatting with a gray background. */
 export const bgGray: typeof Formatting.bgGray = Formatting.bgGray;
-/**
- * Tagged template for a custom hexadecimal foreground colour.
- *
- * @example
- * fg`#0af`;
- * fg`#${"00aaff"}`;
- */
-export const fg: typeof Formatting.fg = Formatting.fg;
-/**
- * Tagged template for a custom hexadecimal background colour.
- *
- * @example
- * bg`#0af`;
- * bg`#${"00aaff"}`;
- */
-export const bg: typeof Formatting.bg = Formatting.bg;
+
+
 /** Fluent formatting with bold text. */
 export const bold: typeof Formatting.bold = Formatting.bold;
 /** Fluent formatting with dimmed text. */
